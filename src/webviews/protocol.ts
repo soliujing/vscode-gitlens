@@ -65,8 +65,8 @@ export const SettingsDidRequestJumpToNotificationType = new IpcNotificationType<
 
 export interface TimelineDatum {
 	author: string;
-	changes: number;
 	added: number;
+	changed: number;
 	deleted: number;
 	commit: string;
 	date: Date;
@@ -74,8 +74,10 @@ export interface TimelineDatum {
 }
 
 export interface TimelineData {
-	fileName: string;
 	dataset: TimelineDatum[];
+	repoPath: string;
+	title: string;
+	uri?: string;
 }
 
 export interface TimelineDidChangeDataNotificationParams {
