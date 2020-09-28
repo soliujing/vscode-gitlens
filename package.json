@@ -7675,6 +7675,13 @@
 					"title": "GitLens",
 					"icon": "images/gitlens-activitybar.svg"
 				}
+			],
+			"panel": [
+				{
+					"id": "gitlensPanel",
+					"title": "GitLens",
+					"icon": "images/views/history.svg"
+				}
 			]
 		},
 		"viewsWelcome": [
@@ -7703,6 +7710,16 @@
 					"when": "config.gitlens.views.welcome.enabled",
 					"contextualTitle": "GitLens",
 					"icon": "images/gitlens-activitybar.svg"
+				}
+			],
+			"gitlensPanel": [
+				{
+					"type": "webview",
+					"id": "gitlens.views.timeline",
+					"name": "Timeline",
+					"when": "!gitlens:disabled",
+					"contextualTitle": "GitLens",
+					"icon": "images/views/history.svg"
 				}
 			],
 			"scm": [
@@ -7818,7 +7835,7 @@
 	},
 	"dependencies": {
 		"@octokit/graphql": "4.5.6",
-		"billboard.js": "2.0.3",
+		"billboard.js": "2.1.1",
 		"chroma-js": "2.1.0",
 		"dayjs": "1.9.1",
 		"iconv-lite": "0.6.2",
