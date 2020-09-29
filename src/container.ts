@@ -32,6 +32,7 @@ import { VslsController } from './vsls/vsls';
 import { RebaseEditorProvider } from './webviews/rebaseEditor';
 import { SettingsWebview } from './webviews/settingsWebview';
 import { TimelineWebview } from './webviews/timelineWebview';
+import { TimelineWebviewView } from './webviews/timelineWebviewView';
 import { WelcomeWebview } from './webviews/welcomeWebview';
 
 export class Container {
@@ -72,6 +73,7 @@ export class Container {
 		context.subscriptions.push((this._contributorsView = new ContributorsView()));
 		context.subscriptions.push((this._searchView = new SearchView()));
 		context.subscriptions.push((this._compareView = new CompareView()));
+		context.subscriptions.push((this._timelineView = new TimelineWebviewView()));
 
 		if (config.views.lineHistory.enabled) {
 			context.subscriptions.push((this._lineHistoryView = new LineHistoryView()));
@@ -303,6 +305,11 @@ export class Container {
 		}
 
 		return this._tagsView;
+	}
+
+	private static _timelineView: TimelineWebviewView;
+	static get timelineView() {
+		return this._timelineView;
 	}
 
 	private static _timelineWebview: TimelineWebview;
