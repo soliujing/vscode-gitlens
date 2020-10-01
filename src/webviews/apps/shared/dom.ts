@@ -13,13 +13,13 @@ export namespace DOM {
 		options?: boolean | AddEventListenerOptions,
 		el?: Element,
 	): Disposable;
-	export function on<K extends keyof DocumentEventMap, T extends Element>(
+	export function on<K extends keyof DocumentEventMap, T extends Document | Element>(
 		el: Document | Element,
 		name: K,
 		listener: (this: T, ev: DocumentEventMap[K]) => any,
 		options?: boolean | AddEventListenerOptions,
 	): Disposable;
-	export function on<K extends keyof DocumentEventMap, T extends Element>(
+	export function on<K extends keyof DocumentEventMap, T extends Document | Element>(
 		selectorOrElement: string | Document | Element,
 		name: K,
 		listener: (this: T, ev: DocumentEventMap[K]) => any,
