@@ -11,7 +11,7 @@ body {
 	font-size: 1.3em;
 	grid-template-areas: 'header' 'entries' 'shortcuts' 'actions';
 	grid-template-columns: repeat(1, 1fr min-content);
-	margin: 1em auto;
+	margin: 0 auto;
 	grid-gap: 0.5em 0;
 	max-width: 1200px;
 	min-width: 450px;
@@ -20,11 +20,21 @@ body {
 header {
 	display: flex;
 	align-items: baseline;
-	margin: 0 0 1em 0;
+	margin: 0;
+
+	h2 {
+		flex: auto 1 1;
+		margin-top: 0.5em;
+		font-size: 2.3rem;
+	}
+
+	h4 {
+		flex: 100% 1 1;
+	}
 }
 
 h4 {
-	font-size: 1em;
+	font-size: 1.5rem;
 	opacity: 0.8;
 }
 
@@ -60,14 +70,17 @@ h4 {
 .actions {
 	grid-area: actions;
 	margin: 10px;
+	display: flex;
 }
+
+$entry-padding: 5px;
 
 .entry {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
 	margin: 0 10px;
-	padding: 10px 0;
+	padding: $entry-padding 0;
 	border: 2px solid transparent;
 	border-radius: 3px;
 
@@ -93,6 +106,7 @@ h4 {
 
 	&.entry--base {
 		margin-left: 10px;
+		margin-top: 5px;
 
 		.vscode-dark & {
 			background: rgba(255, 255, 255, 0.1);
@@ -144,7 +158,7 @@ h4 {
 			content: ' ';
 			background-color: var(--color-background);
 			border-left: 2px solid rgba(0, 153, 0, 1);
-			height: 48px;
+			height: #{28px + ($entry-padding * 2)};
 			width: 2px;
 			margin-left: -18px;
 			position: absolute;
@@ -163,7 +177,7 @@ h4 {
 			content: ' ';
 			background-color: var(--color-background);
 			border-left: 2px solid rgba(212, 153, 0, 1);
-			height: 64px;
+			height: #{44px + ($entry-padding * 2)};
 			width: 2px;
 			margin-left: -18px;
 			margin-top: 6px;
@@ -182,7 +196,7 @@ h4 {
 			content: ' ';
 			background-color: var(--color-background);
 			border-left: 2px solid rgba(153, 0, 0, 1);
-			height: 48px;
+			height: #{28px + ($entry-padding * 2)};
 			width: 2px;
 			margin-left: -18px;
 			position: absolute;
@@ -190,7 +204,8 @@ h4 {
 		}
 	}
 
-	&:nth-last-child(2) {
+	.entries--base &:nth-last-of-type(2),
+	:not(.entries--base) &:nth-last-of-type(1) {
 		& select {
 			& > option[value='squash'],
 			& > option[value='fixup'] {
@@ -280,6 +295,8 @@ h4 {
 .entry-avatar {
 	flex: auto 0 0;
 	margin: 0 -5px 0 0;
+	max-height: 16px;
+	max-width: 16px;
 
 	.entry--squash &,
 	.entry--fixup &,

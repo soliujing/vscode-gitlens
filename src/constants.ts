@@ -3,12 +3,6 @@ import { commands, TextDocument, TextEditor, window } from 'vscode';
 import { ViewShowBranchComparison } from './config';
 import { SearchPattern } from './git/git';
 
-export const applicationInsightsKey = 'a9c302f8-6483-4d01-b92c-c159c799c679';
-export const extensionId = 'gitlens';
-export const extensionOutputChannelName = 'GitLens';
-export const extensionQualifiedId = `eamodio.${extensionId}`;
-export const extensionTerminalName = 'GitLens';
-
 export const quickPickTitleMaxChars = 80;
 
 export enum BuiltInCommands {
@@ -143,7 +137,6 @@ export enum SyncedState {
 export enum GlobalState {
 	DeprecatedVersion = 'gitlensVersion',
 	Avatars = 'gitlens:avatars',
-	DisallowConnectionPrefix = 'gitlens:disallow:connection:',
 	Version = 'gitlens:version',
 }
 
@@ -216,10 +209,12 @@ export interface StarredRepositories {
 export enum WorkspaceState {
 	BranchComparisons = 'gitlens:branch:comparisons',
 	DefaultRemote = 'gitlens:remote:default',
-	DeprecatedPinnedComparisons = 'gitlens:pinned:comparisons',
+	DisallowConnectionPrefix = 'gitlens:disallow:connection:',
 	StarredBranches = 'gitlens:starred:branches',
 	StarredRepositories = 'gitlens:starred:repositories',
 	ViewsRepositoriesAutoRefresh = 'gitlens:views:repositories:autoRefresh',
 	ViewsSearchAndCompareKeepResults = 'gitlens:views:searchAndCompare:keepResults',
 	ViewsSearchAndComparePinnedItems = 'gitlens:views:searchAndCompare:pinned',
+
+	Deprecated_PinnedComparisons = 'gitlens:pinned:comparisons',
 }

@@ -132,6 +132,7 @@ export async function git<TOut extends string | Buffer>(options: GitCommandOptio
 		pendingCommands.set(command, promise);
 	} else {
 		waiting = true;
+		Logger.debug(`${gitCommand} ${GlyphChars.Dot} waiting...`);
 	}
 
 	let exception: Error | undefined;
@@ -157,7 +158,7 @@ export async function git<TOut extends string | Buffer>(options: GitCommandOptio
 	} finally {
 		pendingCommands.delete(command);
 
-		const duration = `${Strings.getDurationMilliseconds(start)} ms ${waiting ? '(await) ' : emptyStr}`;
+		const duration = `${Strings.getDurationMilliseconds(start)} ms ${waiting ? '(waited) ' : emptyStr}`;
 		if (exception !== undefined) {
 			Logger.warn(
 				`[${runOpts.cwd}] Git ${(exception.message || exception.toString() || emptyStr)
@@ -475,15 +476,23 @@ export namespace Git {
 		fileName: string,
 		ref1?: string,
 		ref2?: string,
-		options: { encoding?: string; filters?: GitDiffFilter[]; similarityThreshold?: number | null } = {},
+		options: {
+			encoding?: string;
+			filters?: GitDiffFilter[];
+			linesOfContext?: number;
+			renames?: boolean;
+			similarityThreshold?: number | null;
+		} = {},
 	): Promise<string> {
-		const params = [
-			'diff',
-			`-M${options.similarityThreshold == null ? '' : `${options.similarityThreshold}%`}`,
-			'--no-ext-diff',
-			'-U0',
-			'--minimal',
-		];
+		const params = ['diff', '--no-ext-diff', '--minimal'];
+
+		if (options.linesOfContext != null) {
+			params.push(`-U${options.linesOfContext}`);
+		}
+
+		if (options.renames) {
+			params.push(`-M${options.similarityThreshold == null ? '' : `${options.similarityThreshold}%`}`);
+		}
 
 		if (options.filters != null && options.filters.length !== 0) {
 			params.push(`--diff-filter=${options.filters.join(emptyStr)}`);
@@ -825,14 +834,18 @@ export namespace Git {
 			params.push('--all');
 		}
 
-		params.push(renames && startLine == null && all !== true ? '--follow' : '-m');
+		// Can't allow rename detection (`--follow`) if `all` or a `startLine` is specified
+		if (renames && (all || startLine != null)) {
+			renames = false;
+		}
+
+		params.push(renames ? '--follow' : '-m');
+		if (/*renames ||*/ firstParent) {
+			params.push('--first-parent');
+		}
 
 		if (filters != null && filters.length !== 0) {
 			params.push(`--diff-filter=${filters.join(emptyStr)}`);
-		}
-
-		if ((all !== true && renames) || firstParent) {
-			params.push('--first-parent');
 		}
 
 		if (format !== 'refs') {

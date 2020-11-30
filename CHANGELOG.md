@@ -4,6 +4,81 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/) and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Fixes [#1176](https://github.com/eamodio/vscode-gitlens/issues/1176) - Can't selectively apply stash
+- Fixes [#1212](https://github.com/eamodio/vscode-gitlens/issues/1212) - Stashes list doesn't refresh on deletion
+- Fixes [#1191](https://github.com/eamodio/vscode-gitlens/issues/1191) - "Gitlens › Views › Repositories: Auto Refresh" not working
+- Fixes [#1202](https://github.com/eamodio/vscode-gitlens/issues/1202) - "Copy Remote File Url" url-encodes the URL
+
+## [11.0.6] - 2020-11.28
+
+### Changed
+
+- Changes the _Where did my views go?_ view to show on this next upgrade, since somehow (still not sure how) it was never shown to many (most?) users
+- Changes GitHub connection rejection to be per-workspace (rather than global)
+
+### Fixed
+
+- Fixes [#1205](https://github.com/eamodio/vscode-gitlens/issues/1205) - Setting heatmap's `coldColor` and `hotColor` breaks file blame & related functionality
+- Fixes invalid branch status showing up for remote branches
+
+## [11.0.5] - 2020-11-23
+
+### Fixed
+
+- Fixes [#1204](https://github.com/eamodio/vscode-gitlens/issues/1204) - Compare file changes: "new" and "old" sides of the compare are backwards
+
+## [11.0.4] - 2020-11-22
+
+### Fixed
+
+- Fixes [#1161](https://github.com/eamodio/vscode-gitlens/issues/1161) - Compare file differences between branches
+- Fixes [#1157](https://github.com/eamodio/vscode-gitlens/issues/1157) - GitLens report `X files changed` when comparing working tree with a branch having identical files
+
+## [11.0.3] - 2020-11-22
+
+### Fixed
+
+- Fixes [#1163](https://github.com/eamodio/vscode-gitlens/issues/1163) - Use Interactive Rebase Editor when run from GitLens command (regardless of Git config)
+- Fixes [#1197](https://github.com/eamodio/vscode-gitlens/issues/1197) - Can't squash commit in interactive rebase editor
+- Fixes the `gitlens.codeLens.scopes` setting json schema
+
+## [11.0.2] - 2020-11-20
+
+### Added
+
+- Adds a quick-access button to the _Interactive Rebase Editor_ to disable it &mdash; closes [#1153](https://github.com/eamodio/vscode-gitlens/issues/1153)
+- Adds shortcut keys to start and abort a rebase in the _Interactive Rebase Editor_
+- Adds a _Disable Interactive Rebase Editor_ command (`gitlens.disableRebaseEditor`) to disable the interactive rebase editor
+- Adds an _Enable Interactive Rebase Editor_ command (`gitlens.enableRebaseEditor`) to enable the interactive rebase editor
+- Adds an _Interactive Rebase Editor_ section to the GitLens Interactive Settings
+
+### Changes
+
+- Changes the layout spacing of the _Interactive Rebase Editor_ to allow for more commits to be shown at once
+
+### Fixed
+
+- Fixes [#1187](https://github.com/eamodio/vscode-gitlens/issues/1187) - Warning about incorrect regexp in DevTools console &mdash; thanks to [PR #1188](https://github.com/eamodio/vscode-gitlens/pull/1188) by Andrii Dieiev ([@IllusionMH](https://github.com/IllusionMH))
+- Fixes [#1151](https://github.com/eamodio/vscode-gitlens/issues/1151) - Icons not showing in interactive rebase
+- Fixes [#1166](https://github.com/eamodio/vscode-gitlens/issues/1166) - Enormous avatars in interactive rebase view
+
+## [11.0.1] - 2020-11-16
+
+### Added
+
+- Adds a _Compare References..._ command (`gitlens.compareWith`) to compare two selected references
+- Adds ability to enter reference ranges (e.g. `main...release/1.0`) to the _Git Command Palette_'s _history_ command
+
+### Fixed
+
+- Fixes [#1148](https://github.com/eamodio/vscode-gitlens/issues/1148) - Follow renames on File History cannot load more history
+- Fixes [#1157](https://github.com/eamodio/vscode-gitlens/issues/1157) - GitLens report `X files changed` when comparing working tree with a branch having identical files
+- Fixes [#1150](https://github.com/eamodio/vscode-gitlens/issues/1150) - Cannot read property 'provider' of undefined
+
 ## [11.0.0] - 2020-11-14
 
 ### Added

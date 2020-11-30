@@ -12,8 +12,9 @@ import {
 	workspace,
 } from 'vscode';
 import { Config } from './config';
-import { extensionId } from './constants';
 import { Objects } from './system';
+
+const extensionId = 'gitlens';
 
 type ConfigInspection<T> = {
 	key: string;
@@ -137,10 +138,12 @@ export class Configuration {
 					.get<T>(section === undefined ? extensionId : section, defaultValue)!;
 	}
 
+	getAny<T>(section: string, scope?: ConfigurationScope | null): T | undefined;
+	getAny<T>(section: string, scope: ConfigurationScope | null | undefined, defaultValue: T): T;
 	getAny<T>(section: string, scope?: ConfigurationScope | null, defaultValue?: T) {
 		return defaultValue === undefined
-			? workspace.getConfiguration(undefined, scope).get<T>(section)!
-			: workspace.getConfiguration(undefined, scope).get<T>(section, defaultValue)!;
+			? workspace.getConfiguration(undefined, scope).get<T>(section)
+			: workspace.getConfiguration(undefined, scope).get<T>(section, defaultValue);
 	}
 
 	changed<S1 extends keyof Config>(e: ConfigurationChangeEvent, s1: S1, scope?: ConfigurationScope | null): boolean;
@@ -242,8 +245,8 @@ export class Configuration {
 			.inspect(section === undefined ? extensionId : section);
 	}
 
-	inspectAny(section: string, scope?: ConfigurationScope | null) {
-		return workspace.getConfiguration(undefined, scope).inspect(section);
+	inspectAny<T>(section: string, scope?: ConfigurationScope | null) {
+		return workspace.getConfiguration(undefined, scope).inspect<T>(section);
 	}
 
 	migrate<S1 extends keyof Config>(

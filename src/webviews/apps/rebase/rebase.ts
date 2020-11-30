@@ -1,5 +1,5 @@
 'use strict';
-/*global document*/
+/*global document window*/
 import '../scss/rebase.scss';
 import Sortable from 'sortablejs';
 import {
@@ -7,6 +7,7 @@ import {
 	RebaseDidAbortCommandType,
 	RebaseDidChangeEntryCommandType,
 	RebaseDidChangeNotificationType,
+	RebaseDidDisableCommandType,
 	RebaseDidMoveEntryCommandType,
 	RebaseDidStartCommandType,
 	RebaseEntry,
@@ -90,7 +91,6 @@ class RebaseEditor extends App<RebaseState> {
 
 				const ref = e.item.dataset.ref;
 				if (ref != null) {
-					console.log(ref, e.newIndex, e.oldIndex);
 					this.moveEntry(ref, e.newIndex, false);
 
 					document.querySelectorAll<HTMLLIElement>(`li[data-ref="${ref}"]`)[0]?.focus();
@@ -99,9 +99,33 @@ class RebaseEditor extends App<RebaseState> {
 			onMove: e => !e.related.classList.contains('entry--base'),
 		});
 
+		if (window.navigator.platform.startsWith('Mac')) {
+			let $shortcut = document.querySelector<HTMLSpanElement>('[data-action="start"] .shortcut')!;
+			$shortcut.textContent = 'Cmd+Enter';
+
+			$shortcut = document.querySelector<HTMLSpanElement>('[data-action="abort"] .shortcut')!;
+			$shortcut.textContent = 'Cmd+A';
+		}
+
 		disposables.push(
+			DOM.on(window, 'keydown', (e: KeyboardEvent) => {
+				if (e.ctrlKey || e.metaKey) {
+					if (e.key === 'Enter' || e.key === 'r') {
+						e.preventDefault();
+						e.stopPropagation();
+
+						this.onStartClicked();
+					} else if (e.key === 'a') {
+						e.preventDefault();
+						e.stopPropagation();
+
+						this.onAbortClicked();
+					}
+				}
+			}),
 			DOM.on('[data-action="start"]', 'click', () => this.onStartClicked()),
 			DOM.on('[data-action="abort"]', 'click', () => this.onAbortClicked()),
+			DOM.on('[data-action="disable"]', 'click', () => this.onDisableClicked()),
 			DOM.on('li[data-ref]', 'keydown', function (this: Element, e: KeyboardEvent) {
 				if ((e.target as HTMLElement).matches('select[data-ref]')) {
 					if (e.key === 'Escape') {
@@ -112,6 +136,10 @@ class RebaseEditor extends App<RebaseState> {
 				}
 
 				if (e.key === 'Enter' || e.key === ' ') {
+					if (e.key === 'Enter' && (e.target as HTMLElement).matches('a.entry-ref')) {
+						return;
+					}
+
 					const $select = (this as HTMLLIElement).querySelectorAll<HTMLSelectElement>('select[data-ref]')[0];
 					if ($select != null) {
 						$select.focus();
@@ -200,6 +228,10 @@ class RebaseEditor extends App<RebaseState> {
 
 	private onAbortClicked() {
 		this.sendCommand(RebaseDidAbortCommandType, {});
+	}
+
+	private onDisableClicked() {
+		this.sendCommand(RebaseDidDisableCommandType, {});
 	}
 
 	private onSelectChanged($el: HTMLSelectElement) {
@@ -301,6 +333,7 @@ class RebaseEditor extends App<RebaseState> {
 				++tabIndex,
 			);
 			$container.appendChild($el);
+			$container.classList.add('entries--base');
 		}
 
 		document
@@ -345,6 +378,8 @@ class RebaseEditor extends App<RebaseState> {
 				$select.appendChild(option);
 			}
 			$selectContainer.appendChild($select);
+		} else {
+			$entry.tabIndex = -1;
 		}
 
 		const $message = document.createElement('span');

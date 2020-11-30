@@ -76,7 +76,7 @@ import { GitUri } from './gitUri';
 import { LogCorrelationContext, Logger } from '../logger';
 import { Messages } from '../messages';
 import { GitReflogParser, GitShortLogParser } from './parsers/parsers';
-import { RemoteProvider, RemoteProviderFactory, RemoteProviders, RemoteProviderWithApi } from './remotes/factory';
+import { RemoteProvider, RemoteProviderFactory, RemoteProviders, RichRemoteProvider } from './remotes/factory';
 import { fsExists, isWindows } from './shell';
 import {
 	Arrays,
@@ -125,11 +125,11 @@ export class GitService implements Disposable {
 	}
 
 	private readonly _disposable: Disposable;
-	private readonly _repositoryTree: TernarySearchTree<Repository>;
+	private readonly _repositoryTree: TernarySearchTree<string, Repository>;
 	private _repositoriesLoadingPromise: Promise<void> | undefined;
 
 	private readonly _branchesCache = new Map<string, GitBranch[]>();
-	private readonly _remotesWithApiProviderCache = new Map<string, GitRemote<RemoteProviderWithApi> | null>();
+	private readonly _remotesWithApiProviderCache = new Map<string, GitRemote<RichRemoteProvider> | null>();
 	private readonly _tagsCache = new Map<string, GitTag[]>();
 	private readonly _trackedCache = new Map<string, boolean | Promise<boolean>>();
 	private readonly _userMapCache = new Map<string, { name?: string; email?: string } | null>();
@@ -254,7 +254,9 @@ export class GitService implements Disposable {
 							this.onAnyRepositoryChanged.bind(this),
 						);
 						for (const r of repositories) {
-							this._repositoryTree.set(r.path, r);
+							if (!this._repositoryTree.has(r.path)) {
+								this._repositoryTree.set(r.path, r);
+							}
 						}
 					}
 				}
@@ -262,7 +264,9 @@ export class GitService implements Disposable {
 				// Search for and add all repositories (nested and/or submodules)
 				const repositories = await this.repositorySearch(f);
 				for (const r of repositories) {
-					this._repositoryTree.set(r.path, r);
+					if (!this._repositoryTree.has(r.path)) {
+						this._repositoryTree.set(r.path, r);
+					}
 				}
 			}
 		}
@@ -436,7 +440,7 @@ export class GitService implements Disposable {
 		});
 	}
 
-	private async updateContext(repositoryTree: TernarySearchTree<Repository>) {
+	private async updateContext(repositoryTree: TernarySearchTree<string, Repository>) {
 		const hasRepository = repositoryTree.any();
 		await setEnabled(hasRepository);
 
@@ -475,7 +479,9 @@ export class GitService implements Disposable {
 					disposable.dispose();
 
 					for (const r of repositories) {
-						this._repositoryTree.set(r.path, r);
+						if (!this._repositoryTree.has(r.path)) {
+							this._repositoryTree.set(r.path, r);
+						}
 					}
 
 					await this.updateContext(this._repositoryTree);
@@ -515,9 +521,7 @@ export class GitService implements Disposable {
 
 		let patch;
 		try {
-			patch = await Git.diff(uri.repoPath, uri.fsPath, ref1, ref2, {
-				similarityThreshold: Container.config.advanced.similarityThreshold,
-			});
+			patch = await Git.diff(uri.repoPath, uri.fsPath, ref1, ref2);
 			void (await Git.apply(uri.repoPath, patch));
 		} catch (ex) {
 			const msg: string = ex?.toString() ?? emptyStr;
@@ -748,7 +752,7 @@ export class GitService implements Disposable {
 		const entry = this._repositoryTree.highlander();
 		if (entry == null) return undefined;
 
-		const [repo] = entry;
+		const [, repo] = entry;
 		return repo.path;
 	}
 
@@ -1394,6 +1398,7 @@ export class GitService implements Disposable {
 	}
 
 	@log()
+	@gate()
 	async getCurrentUser(repoPath: string) {
 		let user = this._userMapCache.get(repoPath);
 		if (user != null) return user;
@@ -1517,6 +1522,8 @@ export class GitService implements Disposable {
 			const data = await Git.diff(root, file, ref1, ref2, {
 				...options,
 				filters: ['M'],
+				linesOfContext: 0,
+				renames: true,
 				similarityThreshold: Container.config.advanced.similarityThreshold,
 			});
 			// }
@@ -2182,6 +2189,7 @@ export class GitService implements Disposable {
 
 			const data = await Git.log__file(root, file, ref, {
 				...options,
+				firstParent: options.renames,
 				startLine: range == null ? undefined : range.start.line + 1,
 				endLine: range == null ? undefined : range.end.line + 1,
 			});
@@ -2278,6 +2286,17 @@ export class GitService implements Disposable {
 				query: (limit: number | undefined) =>
 					this.getLogForFile(log.repoPath, fileName, { ...options, limit: limit }),
 			};
+
+			if (options.renames) {
+				const renamed = Iterables.find(
+					moreLog.commits.values(),
+					c => Boolean(c.originalFileName) && c.originalFileName !== fileName,
+				);
+				if (renamed != null) {
+					fileName = renamed.originalFileName!;
+				}
+			}
+
 			mergedLog.more = this.getLogForFileMoreFn(mergedLog, fileName, options);
 
 			return mergedLog;
@@ -2655,18 +2674,18 @@ export class GitService implements Disposable {
 	): Promise<PullRequest | undefined>;
 	async getPullRequestForBranch(
 		branch: string,
-		provider: RemoteProviderWithApi,
+		provider: RichRemoteProvider,
 		options?: { avatarSize?: number; include?: PullRequestState[]; limit?: number; timeout?: number },
 	): Promise<PullRequest | undefined>;
 	@gate()
 	@debug<GitService['getPullRequestForBranch']>({
 		args: {
-			1: (remoteOrProvider: GitRemote | RemoteProviderWithApi) => remoteOrProvider.name,
+			1: (remoteOrProvider: GitRemote | RichRemoteProvider) => remoteOrProvider.name,
 		},
 	})
 	async getPullRequestForBranch(
 		branch: string,
-		remoteOrProvider: GitRemote | RemoteProviderWithApi,
+		remoteOrProvider: GitRemote | RichRemoteProvider,
 		{
 			timeout,
 			...options
@@ -2707,18 +2726,18 @@ export class GitService implements Disposable {
 	): Promise<PullRequest | undefined>;
 	async getPullRequestForCommit(
 		ref: string,
-		provider: RemoteProviderWithApi,
+		provider: RichRemoteProvider,
 		options?: { timeout?: number },
 	): Promise<PullRequest | undefined>;
 	@gate()
 	@debug({
 		args: {
-			1: (remoteOrProvider: GitRemote | RemoteProviderWithApi) => remoteOrProvider.name,
+			1: (remoteOrProvider: GitRemote | RichRemoteProvider) => remoteOrProvider.name,
 		},
 	})
 	async getPullRequestForCommit(
 		ref: string,
-		remoteOrProvider: GitRemote | RemoteProviderWithApi,
+		remoteOrProvider: GitRemote | RichRemoteProvider,
 		{ timeout }: { timeout?: number } = {},
 	): Promise<PullRequest | undefined> {
 		if (GitRevision.isUncommitted(ref)) return undefined;
@@ -2807,25 +2826,25 @@ export class GitService implements Disposable {
 		};
 	}
 
-	async getRemoteWithApiProvider(
+	async getRichRemoteProvider(
 		repoPath: string | undefined,
 		options?: { includeDisconnected?: boolean },
-	): Promise<GitRemote<RemoteProviderWithApi> | undefined>;
-	async getRemoteWithApiProvider(
+	): Promise<GitRemote<RichRemoteProvider> | undefined>;
+	async getRichRemoteProvider(
 		remotes: GitRemote[],
 		options?: { includeDisconnected?: boolean },
-	): Promise<GitRemote<RemoteProviderWithApi> | undefined>;
-	@gate<GitService['getRemoteWithApiProvider']>(
+	): Promise<GitRemote<RichRemoteProvider> | undefined>;
+	@gate<GitService['getRichRemoteProvider']>(
 		(remotesOrRepoPath, options) =>
 			`${typeof remotesOrRepoPath === 'string' ? remotesOrRepoPath : remotesOrRepoPath[0]?.repoPath}:${
 				options?.includeDisconnected ?? false
 			}`,
 	)
 	@log({ args: { 0: () => false } })
-	async getRemoteWithApiProvider(
+	async getRichRemoteProvider(
 		remotesOrRepoPath: GitRemote[] | string | undefined,
 		{ includeDisconnected }: { includeDisconnected?: boolean } = {},
-	): Promise<GitRemote<RemoteProviderWithApi> | undefined> {
+	): Promise<GitRemote<RichRemoteProvider> | undefined> {
 		if (remotesOrRepoPath == null) return undefined;
 
 		const cacheKey = `${includeDisconnected ? 'disconnected|' : ''}${
@@ -2879,9 +2898,9 @@ export class GitService implements Disposable {
 		}
 
 		if (cacheKey != null) {
-			this._remotesWithApiProviderCache.set(cacheKey, remote as GitRemote<RemoteProviderWithApi>);
+			this._remotesWithApiProviderCache.set(cacheKey, remote as GitRemote<RichRemoteProvider>);
 		}
-		return remote as GitRemote<RemoteProviderWithApi>;
+		return remote as GitRemote<RichRemoteProvider>;
 	}
 
 	@log()
@@ -3087,7 +3106,7 @@ export class GitService implements Disposable {
 		return Repository.sort(repositories.filter(r => !r.closed));
 	}
 
-	private async getRepositoryTree(): Promise<TernarySearchTree<Repository>> {
+	private async getRepositoryTree(): Promise<TernarySearchTree<string, Repository>> {
 		if (this._repositoriesLoadingPromise != null) {
 			await this._repositoriesLoadingPromise;
 			this._repositoriesLoadingPromise = undefined;
@@ -3150,7 +3169,7 @@ export class GitService implements Disposable {
 	}
 
 	private findRepositoryForPath(
-		repositoryTree: TernarySearchTree<Repository>,
+		repositoryTree: TernarySearchTree<string, Repository>,
 		path: string,
 		isVslsScheme: boolean | undefined,
 	): Repository | undefined {

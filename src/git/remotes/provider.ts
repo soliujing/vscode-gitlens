@@ -13,7 +13,7 @@ import {
 } from 'vscode';
 import { DynamicAutolinkReference } from '../../annotations/autolinks';
 import { AutolinkReference } from '../../config';
-import { GlobalState } from '../../constants';
+import { WorkspaceState } from '../../constants';
 import { Container } from '../../container';
 import { Logger } from '../../logger';
 import { Messages } from '../../messages';
@@ -88,6 +88,7 @@ export function getNameFromRemoteResource(resource: RemoteResource) {
 }
 
 export abstract class RemoteProvider {
+	readonly type: 'simple' | 'rich' = 'simple';
 	protected _name: string | undefined;
 
 	constructor(
@@ -135,8 +136,8 @@ export abstract class RemoteProvider {
 		}
 	}
 
-	hasApi(): this is RemoteProviderWithApi {
-		return RemoteProviderWithApi.is(this);
+	hasApi(): this is RichRemoteProvider {
+		return RichRemoteProvider.is(this);
 	}
 
 	abstract getLocalInfoFromRemoteUri(
@@ -152,32 +153,34 @@ export abstract class RemoteProvider {
 	url(resource: RemoteResource): string | undefined {
 		switch (resource.type) {
 			case RemoteResourceType.Branch:
-				return this.getUrlForBranch(encodeURIComponent(resource.branch));
+				return encodeURI(this.getUrlForBranch(resource.branch));
 			case RemoteResourceType.Branches:
-				return this.getUrlForBranches();
+				return encodeURI(this.getUrlForBranches());
 			case RemoteResourceType.Commit:
-				return this.getUrlForCommit(encodeURIComponent(resource.sha));
-			case RemoteResourceType.Comparison:
-				return this.getUrlForComparison?.(
-					encodeURIComponent(resource.ref1),
-					encodeURIComponent(resource.ref2),
-					resource.notation ?? '...',
-				);
+				return encodeURI(this.getUrlForCommit(resource.sha));
+			case RemoteResourceType.Comparison: {
+				const url = this.getUrlForComparison?.(resource.ref1, resource.ref2, resource.notation ?? '...');
+				return url != null ? encodeURI(url) : undefined;
+			}
 			case RemoteResourceType.File:
-				return this.getUrlForFile(
-					encodeURIComponent(resource.fileName),
-					resource.branch != null ? encodeURIComponent(resource.branch) : undefined,
-					undefined,
-					resource.range,
+				return encodeURI(
+					this.getUrlForFile(
+						resource.fileName,
+						resource.branch != null ? resource.branch : undefined,
+						undefined,
+						resource.range,
+					),
 				);
 			case RemoteResourceType.Repo:
-				return this.getUrlForRepository();
+				return encodeURI(this.getUrlForRepository());
 			case RemoteResourceType.Revision:
-				return this.getUrlForFile(
-					encodeURIComponent(resource.fileName),
-					resource.branch != null ? encodeURIComponent(resource.branch) : undefined,
-					resource.sha != null ? encodeURIComponent(resource.sha) : undefined,
-					resource.range,
+				return encodeURI(
+					this.getUrlForFile(
+						resource.fileName,
+						resource.branch != null ? resource.branch : undefined,
+						resource.sha != null ? resource.sha : undefined,
+						resource.range,
+					),
 				);
 			default:
 				return undefined;
@@ -235,11 +238,21 @@ export class AuthenticationError extends Error {
 	}
 }
 
+export class ClientError extends Error {
+	constructor(private original: Error) {
+		super(original.message);
+
+		Error.captureStackTrace(this, ClientError);
+	}
+}
+
 // TODO@eamodio revisit how once authenticated, all remotes are always connected, even after a restart
 
-export abstract class RemoteProviderWithApi extends RemoteProvider {
-	static is(provider: RemoteProvider | undefined): provider is RemoteProviderWithApi {
-		return provider instanceof RemoteProviderWithApi;
+export abstract class RichRemoteProvider extends RemoteProvider {
+	readonly type: 'simple' | 'rich' = 'rich';
+
+	static is(provider: RemoteProvider | undefined): provider is RichRemoteProvider {
+		return provider?.type === 'rich';
 	}
 
 	private readonly _onDidChange = new EventEmitter<void>();
@@ -247,7 +260,7 @@ export abstract class RemoteProviderWithApi extends RemoteProvider {
 		return this._onDidChange.event;
 	}
 
-	private invalidAuthenticationCount = 0;
+	private invalidClientExceptionCount = 0;
 
 	constructor(domain: string, path: string, protocol?: string, name?: string, custom?: boolean) {
 		super(domain, path, protocol, name, custom);
@@ -275,7 +288,7 @@ export abstract class RemoteProviderWithApi extends RemoteProvider {
 	}
 
 	private get disallowConnectionKey() {
-		return `${GlobalState.DisallowConnectionPrefix}${this.key}`;
+		return `${WorkspaceState.DisallowConnectionPrefix}${this.key}`;
 	}
 
 	get maybeConnected(): boolean | undefined {
@@ -312,12 +325,12 @@ export abstract class RemoteProviderWithApi extends RemoteProvider {
 	disconnect(silent: boolean = false): void {
 		const disconnected = this._session != null;
 
-		this.invalidAuthenticationCount = 0;
+		this.invalidClientExceptionCount = 0;
 		this._prsByCommit.clear();
 		this._session = null;
 
 		if (disconnected) {
-			void Container.context.globalState.update(this.disallowConnectionKey, true);
+			void Container.context.workspaceState.update(this.disallowConnectionKey, true);
 
 			this._onDidChange.fire();
 			if (!silent) {
@@ -327,7 +340,7 @@ export abstract class RemoteProviderWithApi extends RemoteProvider {
 	}
 
 	@gate()
-	@debug<RemoteProviderWithApi['isConnected']>({
+	@debug<RichRemoteProvider['isConnected']>({
 		exit: connected => `returned ${connected}`,
 	})
 	async isConnected(): Promise<boolean> {
@@ -349,13 +362,13 @@ export abstract class RemoteProviderWithApi extends RemoteProvider {
 
 		try {
 			const author = await this.getProviderAccountForCommit(this._session!, ref, options);
-			this.invalidAuthenticationCount = 0;
+			this.invalidClientExceptionCount = 0;
 			return author;
 		} catch (ex) {
 			Logger.error(ex, cc);
 
-			if (ex instanceof AuthenticationError) {
-				this.handleAuthenticationException();
+			if (ex instanceof ClientError || ex instanceof AuthenticationError) {
+				this.handleClientException();
 			}
 			return undefined;
 		}
@@ -384,13 +397,13 @@ export abstract class RemoteProviderWithApi extends RemoteProvider {
 
 		try {
 			const author = await this.getProviderAccountForEmail(this._session!, email, options);
-			this.invalidAuthenticationCount = 0;
+			this.invalidClientExceptionCount = 0;
 			return author;
 		} catch (ex) {
 			Logger.error(ex, cc);
 
-			if (ex instanceof AuthenticationError) {
-				this.handleAuthenticationException();
+			if (ex instanceof ClientError || ex instanceof AuthenticationError) {
+				this.handleClientException();
 			}
 			return undefined;
 		}
@@ -414,13 +427,13 @@ export abstract class RemoteProviderWithApi extends RemoteProvider {
 
 		try {
 			const issueOrPullRequest = await this.getProviderIssueOrPullRequest(this._session!, id);
-			this.invalidAuthenticationCount = 0;
+			this.invalidClientExceptionCount = 0;
 			return issueOrPullRequest;
 		} catch (ex) {
 			Logger.error(ex, cc);
 
-			if (ex instanceof AuthenticationError) {
-				this.handleAuthenticationException();
+			if (ex instanceof ClientError || ex instanceof AuthenticationError) {
+				this.handleClientException();
 			}
 			return undefined;
 		}
@@ -447,13 +460,13 @@ export abstract class RemoteProviderWithApi extends RemoteProvider {
 
 		try {
 			const pr = await this.getProviderPullRequestForBranch(this._session!, branch, options);
-			this.invalidAuthenticationCount = 0;
+			this.invalidClientExceptionCount = 0;
 			return pr;
 		} catch (ex) {
 			Logger.error(ex, cc);
 
-			if (ex instanceof AuthenticationError) {
-				this.handleAuthenticationException();
+			if (ex instanceof ClientError || ex instanceof AuthenticationError) {
+				this.handleClientException();
 			}
 			return undefined;
 		}
@@ -492,15 +505,15 @@ export abstract class RemoteProviderWithApi extends RemoteProvider {
 		try {
 			const pr = (await this.getProviderPullRequestForCommit(this._session!, ref)) ?? null;
 			this._prsByCommit.set(ref, pr);
-			this.invalidAuthenticationCount = 0;
+			this.invalidClientExceptionCount = 0;
 			return pr;
 		} catch (ex) {
 			Logger.error(ex, cc);
 
 			this._prsByCommit.delete(ref);
 
-			if (ex instanceof AuthenticationError) {
-				this.handleAuthenticationException();
+			if (ex instanceof ClientError || ex instanceof AuthenticationError) {
+				this.handleClientException();
 			}
 			return null;
 		}
@@ -516,8 +529,8 @@ export abstract class RemoteProviderWithApi extends RemoteProvider {
 		if (this._session != null) return this._session;
 
 		if (createIfNone) {
-			await Container.context.globalState.update(this.disallowConnectionKey, undefined);
-		} else if (Container.context.globalState.get<boolean>(this.disallowConnectionKey)) {
+			await Container.context.workspaceState.update(this.disallowConnectionKey, undefined);
+		} else if (Container.context.workspaceState.get<boolean>(this.disallowConnectionKey)) {
 			return undefined;
 		}
 
@@ -527,7 +540,7 @@ export abstract class RemoteProviderWithApi extends RemoteProvider {
 				createIfNone: createIfNone,
 			});
 		} catch (ex) {
-			await Container.context.globalState.update(this.disallowConnectionKey, true);
+			await Container.context.workspaceState.update(this.disallowConnectionKey, true);
 
 			if (ex instanceof Error && ex.message.includes('User did not consent')) {
 				if (!createIfNone) {
@@ -540,16 +553,16 @@ export abstract class RemoteProviderWithApi extends RemoteProvider {
 		}
 
 		if (session === undefined && !createIfNone) {
-			await Container.context.globalState.update(this.disallowConnectionKey, true);
+			await Container.context.workspaceState.update(this.disallowConnectionKey, true);
 
 			void this.promptToConnect();
 		}
 
 		this._session = session ?? null;
-		this.invalidAuthenticationCount = 0;
+		this.invalidClientExceptionCount = 0;
 
 		if (session != null) {
-			await Container.context.globalState.update(this.disallowConnectionKey, undefined);
+			await Container.context.workspaceState.update(this.disallowConnectionKey, undefined);
 
 			if (createIfNone) {
 				this._onDidChange.fire();
@@ -593,10 +606,10 @@ export abstract class RemoteProviderWithApi extends RemoteProvider {
 	}
 
 	@debug()
-	private handleAuthenticationException() {
-		this.invalidAuthenticationCount++;
+	private handleClientException() {
+		this.invalidClientExceptionCount++;
 
-		if (this.invalidAuthenticationCount >= 5) {
+		if (this.invalidClientExceptionCount >= 5) {
 			this.disconnect();
 		}
 	}

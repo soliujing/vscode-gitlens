@@ -2,6 +2,12 @@
 <html lang="en">
 	<head>
 		<meta charset="utf-8" />
+		<style nonce="Z2l0bGVucy1ib290c3RyYXA=">
+			@font-face {
+				font-family: 'codicon';
+				src: url('#{root}/dist/webviews/codicon.ttf?669d352dfabff8f6eaa466c8ae820e43') format('truetype');
+			}
+		</style>
 	</head>
 
 	<template id="token-popup">
@@ -200,7 +206,7 @@
 					For advanced customizations, refer to the
 					<a
 						title="See the GitLens settings docs"
-						href="https://github.com/eamodio/vscode-gitlens/tree/main/#gitlens-settings-"
+						href="https://github.com/eamodio/vscode-gitlens/#gitlens-settings-"
 						>GitLens docs</a
 					>
 					and edit your
@@ -247,6 +253,8 @@
 				<%= require('html-loader!./partials/changes.html') %>
 				<!-- prettier-ignore -->
 				<%= require('html-loader!./partials/heatmap.html') %>
+				<!-- prettier-ignore -->
+				<%= require('html-loader!./partials/rebase-editor.html') %>
 				<!-- prettier-ignore -->
 				<%= require('html-loader!./partials/dates.html') %>
 				<!-- prettier-ignore -->
@@ -431,6 +439,16 @@
 								href="#heatmap"
 								title="Jump to Gutter Heatmap settings"
 								>Gutter Heatmap</a
+							>
+						</li>
+
+						<li class="mt-1">
+							<a
+								class="sidebar__jump-link"
+								data-action="jump"
+								href="#rebase-editor"
+								title="Jump to Interactive Rebase Editor settings"
+								>Interactive Rebase Editor</a
 							>
 						</li>
 

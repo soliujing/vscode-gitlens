@@ -38,7 +38,8 @@ export class Container {
 		| ((e: ConfigurationChangeEvent) => ConfigurationChangeEvent)
 		| undefined;
 
-	static initialize(context: ExtensionContext, config: Config) {
+	static initialize(extensionId: string, context: ExtensionContext, config: Config) {
+		this._extensionId = extensionId;
 		this._context = context;
 		this._config = Container.applyMode(config);
 
@@ -91,7 +92,7 @@ export class Container {
 			});
 		}
 
-		context.subscriptions.push(new RebaseEditorProvider());
+		context.subscriptions.push((this._rebaseEditor = new RebaseEditorProvider()));
 		context.subscriptions.push(new GitTerminalLinkProvider());
 		context.subscriptions.push(new GitFileSystemProvider());
 
@@ -171,6 +172,11 @@ export class Container {
 		return this._contributorsView;
 	}
 
+	private static _extensionId: string;
+	static get extensionId() {
+		return this._extensionId;
+	}
+
 	private static _fileAnnotationController: FileAnnotationController;
 	static get fileAnnotations() {
 		return this._fileAnnotationController;
@@ -208,6 +214,10 @@ export class Container {
 		}
 	}
 
+	static get insiders() {
+		return this._extensionId.endsWith('-insiders');
+	}
+
 	private static _keyboard: Keyboard;
 	static get keyboard() {
 		return this._keyboard;
@@ -235,6 +245,15 @@ export class Container {
 	private static _lineTracker: GitLineTracker;
 	static get lineTracker() {
 		return this._lineTracker;
+	}
+
+	private static _rebaseEditor: RebaseEditorProvider | undefined;
+	static get rebaseEditor() {
+		if (this._rebaseEditor === undefined) {
+			this._context.subscriptions.push((this._rebaseEditor = new RebaseEditorProvider()));
+		}
+
+		return this._rebaseEditor;
 	}
 
 	private static _remotesView: RemotesView | undefined;

@@ -1,13 +1,14 @@
 'use strict';
+import * as paths from 'path';
 import { commands, ExtensionContext, extensions, window, workspace } from 'vscode';
 import { Commands, registerCommands } from './commands';
 import { configuration, Configuration } from './configuration';
-import { ContextKeys, extensionQualifiedId, GlobalState, GlyphChars, setContext, SyncedState } from './constants';
+import { ContextKeys, GlobalState, GlyphChars, setContext, SyncedState } from './constants';
 import { Container } from './container';
 import { Git, GitCommit } from './git/git';
 import { GitService } from './git/gitService';
 import { GitUri } from './git/gitUri';
-import { Logger } from './logger';
+import { Logger, TraceLevel } from './logger';
 import { Messages } from './messages';
 import { Strings, Versions } from './system';
 import { ViewNode } from './views/nodes';
@@ -15,29 +16,29 @@ import { ViewNode } from './views/nodes';
 export async function activate(context: ExtensionContext) {
 	const start = process.hrtime();
 
+	let extensionId = 'eamodio.gitlens';
+	if (paths.basename(context.globalStorageUri.fsPath) === 'eamodio.gitlens-insiders') {
+		extensionId = 'eamodio.gitlens-insiders';
+
+		// Ensure that stable isn't also installed
+		const stable = extensions.getExtension('eamodio.gitlens');
+		if (stable != null) {
+			Logger.log('GitLens (Insiders) was NOT activated because GitLens is also installed');
+
+			void Messages.showInsidersErrorMessage();
+
+			return;
+		}
+	}
+
 	// Pretend we are enabled (until we know otherwise) and set the view contexts to reduce flashing on load
 	void setContext(ContextKeys.Enabled, true);
 
-	const syncedVersion = context.globalState.get<string>(SyncedState.Version);
-	const previousVersion =
-		context.globalState.get<string>(GlobalState.Version) ??
-		context.globalState.get<string>(GlobalState.DeprecatedVersion) ??
-		syncedVersion;
-
-	if (previousVersion == null) {
-		void context.globalState.update(SyncedState.WelcomeViewVisible, true);
-		void setContext(ContextKeys.ViewsWelcomeVisible, true);
-		void setContext(ContextKeys.ViewsUpdatesVisible, false);
-	} else {
-		void setContext(
-			ContextKeys.ViewsWelcomeVisible,
-			context.globalState.get(SyncedState.WelcomeViewVisible) ?? false,
-		);
-		void setContext(
-			ContextKeys.ViewsUpdatesVisible,
-			context.globalState.get(SyncedState.UpdatesViewVisible) !== false,
-		);
-	}
+	context.globalState.setKeysForSync([
+		SyncedState.Version,
+		SyncedState.UpdatesViewVisible,
+		SyncedState.WelcomeViewVisible,
+	]);
 
 	Logger.configure(context, configuration.get('outputLevel'), o => {
 		if (GitUri.is(o)) {
@@ -57,8 +58,45 @@ export async function activate(context: ExtensionContext) {
 		return undefined;
 	});
 
-	const gitlens = extensions.getExtension(extensionQualifiedId)!;
+	const gitlens = extensions.getExtension(extensionId)!;
 	const gitlensVersion = gitlens.packageJSON.version;
+
+	const syncedVersion = context.globalState.get<string>(SyncedState.Version);
+	const previousVersion =
+		context.globalState.get<string>(GlobalState.Version) ??
+		context.globalState.get<string>(GlobalState.DeprecatedVersion) ??
+		syncedVersion;
+
+	if (Logger.level === TraceLevel.Debug || Logger.isDebugging) {
+		Logger.debug(
+			`GitLens (v${gitlensVersion}): syncedVersion=${syncedVersion}, previousVersion=${previousVersion}, ${
+				SyncedState.WelcomeViewVisible
+			}=${context.globalState.get<boolean>(SyncedState.WelcomeViewVisible)}, ${
+				SyncedState.UpdatesViewVisible
+			}=${context.globalState.get<boolean>(SyncedState.UpdatesViewVisible)}`,
+		);
+	}
+
+	if (previousVersion == null) {
+		void context.globalState.update(SyncedState.WelcomeViewVisible, true);
+		void setContext(ContextKeys.ViewsWelcomeVisible, true);
+		void context.globalState.update(SyncedState.UpdatesViewVisible, false);
+		void setContext(ContextKeys.ViewsUpdatesVisible, false);
+	} else {
+		// Force Updates welcome view, since for some reason it never showed for many users
+		if (Versions.compare(previousVersion, Versions.from(11, 0, 5)) !== 1) {
+			await context.globalState.update(SyncedState.UpdatesViewVisible, true);
+		}
+
+		void setContext(
+			ContextKeys.ViewsWelcomeVisible,
+			context.globalState.get<boolean>(SyncedState.WelcomeViewVisible) ?? false,
+		);
+		void setContext(
+			ContextKeys.ViewsUpdatesVisible,
+			context.globalState.get<boolean>(SyncedState.UpdatesViewVisible) !== false,
+		);
+	}
 
 	const enabled = workspace.getConfiguration('git', null).get<boolean>('enabled', true);
 	if (!enabled) {
@@ -92,7 +130,7 @@ export async function activate(context: ExtensionContext) {
 		return;
 	}
 
-	Container.initialize(context, cfg);
+	Container.initialize(extensionId, context, cfg);
 
 	registerCommands(context);
 
@@ -100,12 +138,6 @@ export async function activate(context: ExtensionContext) {
 
 	notifyOnUnsupportedGitVersion(gitVersion);
 	void showWelcomeOrWhatsNew(gitlensVersion, previousVersion);
-
-	context.globalState.setKeysForSync([
-		SyncedState.Version,
-		SyncedState.UpdatesViewVisible,
-		SyncedState.WelcomeViewVisible,
-	]);
 
 	void context.globalState.update(GlobalState.Version, gitlensVersion);
 

@@ -252,9 +252,10 @@ The _Commits_ view lists all of the commits on the current branch, and additiona
 - a toggle to change the file layout: list, tree, auto
 - a branch comparison tool (**Compare &lt;current branch&gt; with &lt;branch, tag, or ref&gt;**) &mdash; [optionally](#commits-view-settings- 'Jump to the Commits view settings') shows a comparison of the current branch (or working tree) to a user-selected reference
   - **Behind** &mdash; lists the commits that are missing from the current branch (i.e. behind) but exist in the selected reference
-    - **# files changed** &mdash; lists all of the files changed between the compared references
+    - **# files changed** &mdash; lists all of the files changed in the behind commits
   - **Ahead** &mdash; lists the commits that the current branch has (i.e. ahead) but are missing in the selected reference
-    - **# files changed** &mdash; lists all of the files changed between the compared references
+    - **# files changed** &mdash; lists all of the files changed in the ahead commits
+  - **# files changed** &mdash; lists all of the files changed between the compared references
 - the current branch status &mdash; shows the upstream status of the current branch
   - **Publish &lt;current branch&gt; to &lt;remote&gt;** &mdash; shown when the current branch has not been published to a remote
   - **Up to date with &lt;remote&gt;** &mdash; shown when the current branch is up to date with the upstream remote
@@ -302,9 +303,10 @@ The _Branches_ view lists all of the local branches, and additionally provides,
   - _Yellow dot_ &mdash; both unpublished and un-pulled changes
 - a branch comparison tool (**Compare &lt;branch&gt; with &lt;branch, tag, or ref&gt;**) &mdash; [optionally](#branches-view-settings- 'Jump to the Branches view settings') shows a comparison of the branch to a user-selected reference
   - **Behind** &mdash; lists the commits that are missing from the branch (i.e. behind) but exist in the selected reference
-    - **# files changed** &mdash; lists all of the files changed between the compared references
+    - **# files changed** &mdash; lists all of the files changed in the behind commits
   - **Ahead** &mdash; lists the commits that the branch has (i.e. ahead) but are missing in the selected reference
-    - **# files changed** &mdash; lists all of the files changed between the compared references
+    - **# files changed** &mdash; lists all of the files changed in the ahead commits
+  - **# files changed** &mdash; lists all of the files changed between the compared references
 - the branch status &mdash; shows the upstream status of the branch
   - **Publish &lt;branch&gt; to &lt;remote&gt;** &mdash; shown when the current branch has not been published to a remote
   - **Changes to push to &lt;remote&gt;** &mdash; lists of all the files changed in the unpublished commits when the branch has (unpublished) commits that waiting to be pushed to the upstream remote
@@ -396,9 +398,10 @@ The _Search & Compare_ view lists pinnable (saved) results for searching commit 
     - _Show Commit_ command (`gitlens.showQuickCommitDetails`)
 - pinnable comparison &mdash; shows a comparison of the two user-selected references
   - **Behind** &mdash; lists the commits that are missing from the branch (i.e. behind) but exist in the selected reference
-    - **# files changed** &mdash; lists all of the files changed between the compared references
+    - **# files changed** &mdash; lists all of the files changed in the behind commits
   - **Ahead** &mdash; lists the commits that the branch has (i.e. ahead) but are missing in the selected reference
-    - **# files changed** &mdash; lists all of the files changed between the compared references
+    - **# files changed** &mdash; lists all of the files changed in the ahead commits
+  - **# files changed** &mdash; lists all of the files changed between the compared references
   - Comparision results can be provided by the following commands
     - _Compare with Upstream_ command (`gitlens.views.compareWithUpstream`)
     - _Compare with Working Tree_ command (`gitlens.views.compareWithWorking`)
@@ -563,8 +566,9 @@ Additionally, these integrations provide commands to copy the url of or open, fi
 
 - Adds a _Switch to Another Branch_ (`gitlens.views.switchToAnotherBranch`) command &mdash; to quickly switch the current branch
 
-- Adds a _Compare HEAD with..._ command (`gitlens.diffHeadWith`) to compare the index (HEAD) with the selected reference
-- Adds a _Compare Working Tree with..._ command (`gitlens.diffWorkingWith`) to compare the working tree with the selected reference
+- Adds a _Compare References..._ command (`gitlens.compareWith`) to compare two selected references
+- Adds a _Compare HEAD with..._ command (`gitlens.compareHeadWith`) to compare the index (HEAD) with the selected reference
+- Adds a _Compare Working Tree with..._ command (`gitlens.compareWorkingWith`) to compare the working tree with the selected reference
 
 - Adds an _Open Changes (difftool)_ command (`gitlens.externalDiff`) to open the changes of a file or set of files with the configured git difftool
 - Adds an _Open All Changes (difftool)_ command (`gitlens.externalDiffAll`) to open all working changes with the configured git difftool
@@ -843,7 +847,7 @@ See also [View Settings](#view-settings- 'Jump to the View settings')
 | `gitlens.gitCommands.search.matchCase`            | Specifies whether to match commit search patterns with or without regard to casing                                                    |
 | `gitlens.gitCommands.search.matchRegex`           | Specifies whether to match commit search patterns using regular expressions                                                           |
 | `gitlens.gitCommands.search.showResultsInSideBar` | Specifies whether to show the commit search results directly in the quick pick menu, in the Side Bar, or will be based on the context |
-| `gitlens.gitCommands.skipConfirmations`           | Specifies which (and when) Git commands will skip the confirmation step, using the format: `git-command-name:(menu                    | command)` |
+| `gitlens.gitCommands.skipConfirmations`           | Specifies which (and when) Git commands will skip the confirmation step, using the format: `git-command-name:(menu/command)`          |
 
 ## Date & Time Settings [#](#date--time-settings- 'Date & Time Settings')
 
@@ -950,6 +954,7 @@ A big thanks to the people that have contributed to this project:
 - Andrea Cigana ([@ciganandrea](https://github.com/ciganandrea)) &mdash; [contributions](https://github.com/eamodio/vscode-gitlens/commits?author=ciganandrea)
 - Ash Clarke ([@ashclarke](https://github.com/ashclarke)) &mdash; [contributions](https://github.com/eamodio/vscode-gitlens/commits?author=ashclarke)
 - Matt Cooper ([@vtbassmatt](https://github.com/vtbassmatt)) &mdash; [contributions](https://github.com/eamodio/vscode-gitlens/commits?author=vtbassmatt)
+- Andrii Dieiev ([@IllusionMH](https://github.com/IllusionMH)) &mdash; [contributions](https://github.com/eamodio/vscode-gitlens/commits?author=IllusionMH)
 - Segev Finer ([@segevfiner](https://github.com/segevfiner)) &mdash; [contributions](https://github.com/eamodio/vscode-gitlens/commits?author=segevfiner)
 - Cory Forsyth ([@bantic](https://github.com/bantic)) &mdash; [contributions](https://github.com/eamodio/vscode-gitlens/commits?author=bantic)
 - John Gee ([@shadowspawn](https://github.com/shadowspawn)) &mdash; [contributions](https://github.com/eamodio/vscode-gitlens/commits?author=shadowspawn)

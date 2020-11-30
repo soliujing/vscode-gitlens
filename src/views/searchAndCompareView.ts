@@ -180,7 +180,7 @@ export class SearchAndCompareViewNode extends ViewNode<SearchAndCompareView> {
 		void (await this.view.compare(repoPath, selectedRef.ref, ref));
 	}
 
-	async selectForCompare(repoPath?: string, ref?: string | NamedRef) {
+	async selectForCompare(repoPath?: string, ref?: string | NamedRef, options?: { prompt?: boolean }) {
 		if (repoPath == null) {
 			repoPath = await getRepoPathOrPrompt('Compare');
 		}
@@ -188,10 +188,11 @@ export class SearchAndCompareViewNode extends ViewNode<SearchAndCompareView> {
 
 		this.removeComparePicker(true);
 
-		let autoCompare = false;
+		let prompt = options?.prompt ?? false;
+		let ref2;
 		if (ref == null) {
 			const pick = await ReferencePicker.show(repoPath, 'Compare', 'Choose a reference to compare', {
-				allowEnteringRefs: true,
+				allowEnteringRefs: { ranges: true },
 				// checkmarks: false,
 				include:
 					ReferencesQuickPickIncludes.BranchesAndTags |
@@ -210,7 +211,15 @@ export class SearchAndCompareViewNode extends ViewNode<SearchAndCompareView> {
 
 			ref = pick.ref;
 
-			autoCompare = true;
+			if (GitRevision.isRange(ref)) {
+				const range = GitRevision.splitRange(ref);
+				if (range != null) {
+					ref = range.ref1 || 'HEAD';
+					ref2 = range.ref2 || 'HEAD';
+				}
+			}
+
+			prompt = true;
 		}
 
 		this.comparePicker = new ComparePickerNode(this.view, this, {
@@ -225,8 +234,8 @@ export class SearchAndCompareViewNode extends ViewNode<SearchAndCompareView> {
 
 		await this.view.reveal(this.comparePicker, { focus: false, select: true });
 
-		if (autoCompare) {
-			await this.compareWithSelected();
+		if (prompt) {
+			await this.compareWithSelected(repoPath, ref2);
 		}
 	}
 
@@ -359,8 +368,8 @@ export class SearchAndCompareView extends ViewBase<SearchAndCompareViewNode, Sea
 		void this.ensureRoot().compareWithSelected(repoPath, ref);
 	}
 
-	selectForCompare(repoPath?: string, ref?: string | NamedRef) {
-		void this.ensureRoot().selectForCompare(repoPath, ref);
+	selectForCompare(repoPath?: string, ref?: string | NamedRef, options?: { prompt?: boolean }) {
+		void this.ensureRoot().selectForCompare(repoPath, ref, options);
 	}
 
 	async search(
@@ -406,7 +415,7 @@ export class SearchAndCompareView extends ViewBase<SearchAndCompareViewNode, Sea
 		if (savedPins == null) {
 			// Migrate any deprecated pinned items
 			const deprecatedPins = Container.context.workspaceState.get<DeprecatedPinnedComparisons>(
-				WorkspaceState.DeprecatedPinnedComparisons,
+				WorkspaceState.Deprecated_PinnedComparisons,
 			);
 			if (deprecatedPins == null) return [];
 
@@ -422,7 +431,7 @@ export class SearchAndCompareView extends ViewBase<SearchAndCompareViewNode, Sea
 			}
 
 			void Container.context.workspaceState.update(WorkspaceState.ViewsSearchAndComparePinnedItems, savedPins);
-			void Container.context.workspaceState.update(WorkspaceState.DeprecatedPinnedComparisons, undefined);
+			void Container.context.workspaceState.update(WorkspaceState.Deprecated_PinnedComparisons, undefined);
 		}
 
 		const root = this.ensureRoot();

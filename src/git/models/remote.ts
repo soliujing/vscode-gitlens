@@ -1,17 +1,17 @@
 'use strict';
 import { WorkspaceState } from '../../constants';
 import { Container } from '../../container';
-import { RemoteProvider, RemoteProviderWithApi } from '../remotes/factory';
+import { RemoteProvider, RichRemoteProvider } from '../remotes/factory';
 
 export enum GitRemoteType {
 	Fetch = 'fetch',
 	Push = 'push',
 }
 
-export class GitRemote<
-	TProvider extends RemoteProvider | undefined = RemoteProvider | RemoteProviderWithApi | undefined
-> {
+export class GitRemote<TProvider extends RemoteProvider | undefined = RemoteProvider | RichRemoteProvider | undefined> {
 	static getHighlanderProviders(remotes: GitRemote<RemoteProvider>[]) {
+		if (remotes.length === 0) return undefined;
+
 		const remote = remotes.length === 1 ? remotes[0] : remotes.find(r => r.default);
 		if (remote != null) return [remote.provider];
 
@@ -22,6 +22,8 @@ export class GitRemote<
 	}
 
 	static getHighlanderProviderName(remotes: GitRemote<RemoteProvider>[]) {
+		if (remotes.length === 0) return undefined;
+
 		const remote = remotes.length === 1 ? remotes[0] : remotes.find(r => r.default);
 		if (remote != null) return remote.provider.name;
 
