@@ -2,6 +2,7 @@
 import {
 	DecorationInstanceRenderOptions,
 	DecorationOptions,
+	OverviewRulerLane,
 	Range,
 	TextEditorDecorationType,
 	ThemableDecorationAttachmentRenderOptions,
@@ -10,8 +11,9 @@ import {
 	Uri,
 	window,
 } from 'vscode';
-import { configuration } from '../configuration';
-import { GlyphChars } from '../constants';
+import { HeatmapLocations } from '../config';
+import { Config, configuration } from '../configuration';
+import { Colors, GlyphChars } from '../constants';
 import { Container } from '../container';
 import { CommitFormatOptions, CommitFormatter, GitCommit } from '../git/git';
 import { Objects, Strings } from '../system';
@@ -21,11 +23,6 @@ export interface ComputedHeatmap {
 	coldThresholdTimestamp: number;
 	colors: { hot: string[]; cold: string[] };
 	computeRelativeAge(date: Date): number;
-}
-
-interface HeatmapConfig {
-	enabled: boolean;
-	location?: 'left' | 'right';
 }
 
 interface RenderOptions
@@ -113,17 +110,25 @@ export class Annotations {
 	) {
 		const [r, g, b, a] = this.getHeatmapColor(date, heatmap);
 
+		const { locations } = Container.config.heatmap;
+		const gutter = locations.includes(HeatmapLocations.Gutter);
+		const overview = locations.includes(HeatmapLocations.Overview);
+
 		const key = `${r},${g},${b},${a}`;
 		let colorDecoration = map.get(key);
 		if (colorDecoration == null) {
 			colorDecoration = {
 				decorationType: window.createTextEditorDecorationType({
-					gutterIconPath: Uri.parse(
-						`data:image/svg+xml,${encodeURIComponent(
-							`<svg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 18 18'><rect fill='rgb(${r},${g},${b})' fill-opacity='${a}' x='7' y='0' width='2' height='18'/></svg>`,
-						)}`,
-					),
-					gutterIconSize: 'contain',
+					gutterIconPath: gutter
+						? Uri.parse(
+								`data:image/svg+xml,${encodeURIComponent(
+									`<svg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 18 18'><rect fill='rgb(${r},${g},${b})' fill-opacity='${a}' x='7' y='0' width='2' height='18'/></svg>`,
+								)}`,
+						  )
+						: undefined,
+					gutterIconSize: gutter ? 'contain' : undefined,
+					overviewRulerLane: overview ? OverviewRulerLane.Center : undefined,
+					overviewRulerColor: overview ? `rgba(${r},${g},${b},${a})` : undefined,
 				}),
 				rangesOrOptions: [range],
 			};
@@ -159,7 +164,7 @@ export class Annotations {
 
 	static gutterRenderOptions(
 		separateLines: boolean,
-		heatmap: HeatmapConfig,
+		heatmap: Config['blame']['heatmap'],
 		avatars: boolean,
 		format: string,
 		options: CommitFormatOptions,
@@ -205,10 +210,10 @@ export class Annotations {
 		}
 
 		return {
-			backgroundColor: new ThemeColor('gitlens.gutterBackgroundColor'),
+			backgroundColor: new ThemeColor(Colors.GutterBackgroundColor),
 			borderStyle: borderStyle,
 			borderWidth: borderWidth,
-			color: new ThemeColor('gitlens.gutterForegroundColor'),
+			color: new ThemeColor(Colors.GutterForegroundColor),
 			fontWeight: 'normal',
 			fontStyle: 'normal',
 			height: '100%',
@@ -217,7 +222,7 @@ export class Annotations {
 				avatars ? ';padding: 0 0 0 18px' : ''
 			}`,
 			width: width,
-			uncommittedColor: new ThemeColor('gitlens.gutterUncommittedForegroundColor'),
+			uncommittedColor: new ThemeColor(Colors.GutterUncommittedForegroundColor),
 		};
 	}
 
@@ -244,8 +249,8 @@ export class Annotations {
 		return {
 			renderOptions: {
 				after: {
-					backgroundColor: new ThemeColor('gitlens.trailingLineBackgroundColor'),
-					color: new ThemeColor('gitlens.trailingLineForegroundColor'),
+					backgroundColor: new ThemeColor(Colors.TrailingLineBackgroundColor),
+					color: new ThemeColor(Colors.TrailingLineForegroundColor),
 					contentText: Strings.pad(message.replace(/ /g, GlyphChars.Space), 1, 1),
 					fontWeight: 'normal',
 					fontStyle: 'normal',

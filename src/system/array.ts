@@ -6,6 +6,25 @@ import {
 	xor as _xor,
 } from 'lodash-es';
 
+export function chunk<T>(source: T[], size: number): T[][] {
+	const chunks = [];
+
+	let index = 0;
+	while (index < source.length) {
+		chunks.push(source.slice(index, size + index));
+		index += size;
+	}
+	return chunks;
+}
+
+export function countStringLength(source: string[]): number {
+	let length = 0;
+	for (const s of source) {
+		length += s.length;
+	}
+	return length;
+}
+
 export function countUniques<T>(source: T[], accessor: (item: T) => string): Record<string, number> {
 	const uniqueCounts = Object.create(null) as Record<string, number>;
 	for (const item of source) {

@@ -12,19 +12,13 @@
 
 	<body class="preload">
 		<!-- <canvas class="snow"></canvas>
-		<div class="snow__trigger">
-			<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 125">
-				<path
-					fill="#b21a18"
-					d="M31.25 23.64C45.96 13.15 70.42 11.19 80.7 29.1c3.1 5.4 5.18 11.4 6.86 17.37 1.16 4.1 4.48 12.42.08 15.67-2.96 2.18-10.78 3.95-22.16 3.95s-23.17-2.3-25.32-7.87c-1.02-2.65 1.26-5.5.97-8.31-.63-6.2-7.5-5.97-10.86-3.75-4.58 3-5.17 6.66-9.64 10-1.5 1.12-3.6 1.93-5.22.98-1.5-.9-1.96-2.88-1.96-4.63 0-12.08 10.88-23.94 17.8-28.87z"
-				/>
-				<circle fill="#C5C5C5" cx="13.45" cy="69.81" r="8.45" />
-				<path
-					fill="#C5C5C5"
-					d="M64.66 84.31c-17.4 0-35.17-1.38-28.93-25.06.37 13.72 29 12.57 29 12.57s30.12.28 29.88-11.27C97.69 85.43 82.06 84.3 64.66 84.3z"
-				/>
-			</svg>
-		</div> -->
+		<img
+			class="snow__trigger snow__trigger--fixed-right snow__trigger--flipped"
+			title="Let it snow — Happy Holidays!"
+			alt="Let it snow — Happy Holidays!"
+			src="#{root}/images/snowman.png"
+		/> -->
+
 		<div class="container">
 			<header>
 				<a class="header__link" title="Learn more about GitLens" href="https://gitlens.amod.io">
@@ -400,6 +394,35 @@
 									></span>
 								</span>
 							</div>
+
+							<div class="setting">
+								<div class="setting__input">
+									<label for="defaultTimeFormat">Time&nbsp;format</label>
+									<input
+										id="defaultTimeFormat"
+										name="defaultTimeFormat"
+										type="text"
+										placeholder="defaults to h:mma"
+										data-setting
+										data-setting-preview
+									/>
+									<a
+										class="link__learn-more"
+										title="See Moment.js docs for valid date formats"
+										href="https://momentjs.com/docs/#/displaying/format/"
+									>
+										<i class="icon icon__info"></i>
+									</a>
+								</div>
+								<span class="setting__hint"
+									>Example date:
+									<span
+										data-setting-preview="defaultTimeFormat"
+										data-setting-preview-type="date"
+										data-setting-preview-default="h:mma"
+									></span>
+								</span>
+							</div>
 						</div>
 					</div>
 				</section>
@@ -421,21 +444,22 @@
 				<div class="sidebar__group sidebar__group--sponsors">
 					<h2>Sponsors</h2>
 					<a
+						class="sponsor__image-link"
 						title="Try CodeStream &mdash; Pull Requests and Code Reviews in your IDE"
 						href="https://sponsorlink.codestream.com/?utm_source=gitlens_welcome&utm_medium=banner&utm_campaign=gitlens"
 					>
 						<img
 							class="sponsor__image light"
-							src="https://alt-images.codestream.com/codestream_logo_gitlens_welcome_dark.png"
+							src="https://alt-images.codestream.com/codestream_logo_gitlens_web_dark.png"
 							alt="CodeStream Logo &mdash; Pull Requests and Code Reviews in your IDE"
 						/>
 						<img
 							class="sponsor__image dark"
-							src="https://alt-images.codestream.com/codestream_logo_gitlens_welcome_light.png"
+							src="https://alt-images.codestream.com/codestream_logo_gitlens_web_light.png"
 							alt="CodeStream Logo &mdash; Pull Requests and Code Reviews in your IDE"
 						/>
 					</a>
-					<a title="Visit Embark Studios" href="https://embark-studios.com">
+					<a class="sponsor__image-link" title="Visit Embark Studios" href="https://embark-studios.com">
 						<img
 							class="sponsor__image light"
 							src="https://raw.githubusercontent.com/eamodio/vscode-gitlens/main/images/docs/sponsors/embark-studios_dark.png"
@@ -445,6 +469,18 @@
 							class="sponsor__image dark"
 							src="https://raw.githubusercontent.com/eamodio/vscode-gitlens/main/images/docs/sponsors/embark-studios_light.png"
 							alt="Embark Studios Logo"
+						/>
+					</a>
+					<a class="sponsor__image-link" title="Visit Localize" href="https://localizejs.com">
+						<img
+							class="sponsor__image light"
+							src="https://raw.githubusercontent.com/eamodio/vscode-gitlens/main/images/docs/sponsors/localize_dark.png"
+							alt="Localize Logo"
+						/>
+						<img
+							class="sponsor__image dark"
+							src="https://raw.githubusercontent.com/eamodio/vscode-gitlens/main/images/docs/sponsors/localize_light.png"
+							alt="Localize Logo"
 						/>
 					</a>
 				</div>

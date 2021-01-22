@@ -2,40 +2,15 @@
 import { commands, ConfigurationChangeEvent, Disposable, TreeItem, TreeItemCollapsibleState } from 'vscode';
 import { Avatars } from '../avatars';
 import { configuration, ContributorsViewConfig, ViewFilesLayout } from '../configuration';
+import { GlyphChars } from '../constants';
 import { Container } from '../container';
-import { Repository, RepositoryChange, RepositoryChangeEvent } from '../git/git';
+import { RepositoryChange, RepositoryChangeComparisonMode, RepositoryChangeEvent } from '../git/git';
 import { GitUri } from '../git/gitUri';
-import {
-	ContextValues,
-	ContributorsNode,
-	RepositoryNode,
-	SubscribeableViewNode,
-	unknownGitUri,
-	ViewNode,
-} from './nodes';
-import { debug, gate } from '../system';
+import { ContributorsNode, RepositoryFolderNode, unknownGitUri, ViewNode } from './nodes';
+import { debug, gate, Strings } from '../system';
 import { ViewBase } from './viewBase';
 
-export class ContributorsRepositoryNode extends SubscribeableViewNode<ContributorsView> {
-	protected splatted = true;
-	private child: ContributorsNode | undefined;
-
-	constructor(
-		uri: GitUri,
-		view: ContributorsView,
-		parent: ViewNode,
-		public readonly repo: Repository,
-		splatted: boolean,
-	) {
-		super(uri, view, parent);
-
-		this.splatted = splatted;
-	}
-
-	get id(): string {
-		return RepositoryNode.getId(this.repo.path);
-	}
-
+export class ContributorsRepositoryNode extends RepositoryFolderNode<ContributorsView, ContributorsNode> {
 	async getChildren(): Promise<ViewNode[]> {
 		if (this.child == null) {
 			this.child = new ContributorsNode(this.uri, this.view, this, this.repo);
@@ -44,70 +19,22 @@ export class ContributorsRepositoryNode extends SubscribeableViewNode<Contributo
 		return this.child.getChildren();
 	}
 
-	getTreeItem(): TreeItem {
-		const item = new TreeItem(
-			this.repo.formattedName ?? this.uri.repoPath ?? '',
-			TreeItemCollapsibleState.Expanded,
-		);
-		item.contextValue = ContextValues.RepositoryFolder;
-
-		return item;
-	}
-
-	async getSplattedChild() {
-		if (this.child == null) {
-			await this.getChildren();
-		}
-
-		return this.child;
-	}
-
-	@gate()
 	@debug()
-	async refresh(reset: boolean = false) {
-		await this.child?.triggerChange(reset);
-
-		await this.ensureSubscription();
-	}
-
-	@debug()
-	protected subscribe() {
+	protected async subscribe() {
 		return Disposable.from(
-			this.repo.onDidChange(this.onRepositoryChanged, this),
+			await super.subscribe(),
 			Avatars.onDidFetch(e => this.child?.updateAvatar(e.email)),
 		);
 	}
 
-	protected get requiresResetOnVisible(): boolean {
-		return this._repoUpdatedAt !== this.repo.updatedAt;
-	}
-
-	private _repoUpdatedAt: number = this.repo.updatedAt;
-
-	@debug({
-		args: {
-			0: (e: RepositoryChangeEvent) =>
-				`{ repository: ${e.repository?.name ?? ''}, changes: ${e.changes.join()} }`,
-		},
-	})
-	private onRepositoryChanged(e: RepositoryChangeEvent) {
-		this._repoUpdatedAt = this.repo.updatedAt;
-
-		if (e.changed(RepositoryChange.Closed)) {
-			this.dispose();
-			void this.parent?.triggerChange(true);
-
-			return;
-		}
-
-		if (
-			e.changed(RepositoryChange.Config) ||
-			e.changed(RepositoryChange.Heads) ||
-			e.changed(RepositoryChange.Remotes) ||
-			e.changed(RepositoryChange.Unknown)
-		) {
-			void this.triggerChange(true);
-		}
+	protected changed(e: RepositoryChangeEvent) {
+		return e.changed(
+			RepositoryChange.Config,
+			RepositoryChange.Heads,
+			RepositoryChange.Remotes,
+			RepositoryChange.Unknown,
+			RepositoryChangeComparisonMode.Any,
+		);
 	}
 }
 
@@ -139,7 +66,21 @@ export class ContributorsViewNode extends ViewNode<ContributorsView> {
 		if (this.children.length === 1) {
 			const [child] = this.children;
 
+			if (!child.repo.supportsChangeEvents) {
+				this.view.description = `${Strings.pad(GlyphChars.Warning, 0, 2)}Auto-refresh unavailable`;
+			}
+
 			const contributors = await child.repo.getContributors();
+			if (contributors.length === 0) {
+				this.view.message = 'No contributors could be found.';
+				this.view.title = 'Contributors';
+
+				void child.ensureSubscription();
+
+				return [];
+			}
+
+			this.view.message = undefined;
 			this.view.title = `Contributors (${contributors.length})`;
 
 			return child.getChildren();
@@ -192,7 +133,14 @@ export class ContributorsView extends ViewBase<ContributorsViewNode, Contributor
 			() => commands.executeCommand('gitlens.views.copy', this.selection),
 			this,
 		);
-		commands.registerCommand(this.getQualifiedCommand('refresh'), () => this.refresh(true), this);
+		commands.registerCommand(
+			this.getQualifiedCommand('refresh'),
+			async () => {
+				await Container.git.resetCaches('contributors');
+				return this.refresh(true);
+			},
+			this,
+		);
 		commands.registerCommand(
 			this.getQualifiedCommand('setFilesLayoutToAuto'),
 			() => this.setFilesLayout(ViewFilesLayout.Auto),
@@ -217,9 +165,11 @@ export class ContributorsView extends ViewBase<ContributorsViewNode, Contributor
 		if (
 			!changed &&
 			!configuration.changed(e, 'defaultDateFormat') &&
+			!configuration.changed(e, 'defaultDateShortFormat') &&
 			!configuration.changed(e, 'defaultDateSource') &&
 			!configuration.changed(e, 'defaultDateStyle') &&
-			!configuration.changed(e, 'defaultGravatarsStyle')
+			!configuration.changed(e, 'defaultGravatarsStyle') &&
+			!configuration.changed(e, 'defaultTimeFormat')
 		) {
 			return false;
 		}

@@ -3,7 +3,7 @@ import { ThemeIcon, TreeItem, TreeItemCollapsibleState } from 'vscode';
 import { BranchesView } from '../branchesView';
 import { CommitsView } from '../commitsView';
 import { BranchComparison, BranchComparisons, GlyphChars, WorkspaceState } from '../../constants';
-import { BranchSorting, TagSorting, ViewShowBranchComparison } from '../../configuration';
+import { ViewShowBranchComparison } from '../../configuration';
 import { Container } from '../../container';
 import { GitBranch, GitRevision } from '../../git/git';
 import { GitUri } from '../../git/gitUri';
@@ -17,8 +17,8 @@ import { ContextValues, ViewNode } from './viewNode';
 
 export class CompareBranchNode extends ViewNode<BranchesView | CommitsView | RepositoriesView> {
 	static key = ':compare-branch';
-	static getId(repoPath: string, name: string): string {
-		return `${RepositoryNode.getId(repoPath)}${this.key}(${name})`;
+	static getId(repoPath: string, name: string, root: boolean): string {
+		return `${RepositoryNode.getId(repoPath)}${this.key}(${name})${root ? ':root' : ''}`;
 	}
 
 	private _children: ViewNode[] | undefined;
@@ -29,6 +29,9 @@ export class CompareBranchNode extends ViewNode<BranchesView | CommitsView | Rep
 		view: BranchesView | CommitsView | RepositoriesView,
 		parent: ViewNode,
 		public readonly branch: GitBranch,
+		private showComparison: ViewShowBranchComparison,
+		// Specifies that the node is shown as a root
+		public readonly root: boolean = false,
 	) {
 		super(uri, view, parent);
 
@@ -52,7 +55,7 @@ export class CompareBranchNode extends ViewNode<BranchesView | CommitsView | Rep
 	}
 
 	get id(): string {
-		return CompareBranchNode.getId(this.branch.repoPath, this.branch.name);
+		return CompareBranchNode.getId(this.branch.repoPath, this.branch.name, this.root);
 	}
 
 	get repoPath(): string {
@@ -69,6 +72,9 @@ export class CompareBranchNode extends ViewNode<BranchesView | CommitsView | Rep
 			const aheadBehindCounts = await Container.git.getAheadBehindCommitCount(this.branch.repoPath, [
 				GitRevision.createRange(behind.ref1, behind.ref2, '...'),
 			]);
+			const mergeBase =
+				(await Container.git.getMergeBase(this.repoPath, behind.ref1, behind.ref2, { forkPoint: true })) ??
+				(await Container.git.getMergeBase(this.repoPath, behind.ref1, behind.ref2));
 
 			this._children = [
 				new ResultsCommitsNode(
@@ -81,7 +87,7 @@ export class CompareBranchNode extends ViewNode<BranchesView | CommitsView | Rep
 						comparison: behind,
 						direction: 'behind',
 						files: {
-							ref1: this.compareWithWorkingTree ? '' : behind.ref1,
+							ref1: this.compareWithWorkingTree ? '' : mergeBase ?? behind.ref1,
 							ref2: behind.ref2,
 							query: this.getBehindFilesQuery.bind(this),
 						},
@@ -104,7 +110,7 @@ export class CompareBranchNode extends ViewNode<BranchesView | CommitsView | Rep
 						comparison: ahead,
 						direction: 'ahead',
 						files: {
-							ref1: ahead.ref1,
+							ref1: mergeBase ?? ahead.ref1,
 							ref2: this.compareWithWorkingTree ? '' : ahead.ref2,
 							query: this.getAheadFilesQuery.bind(this),
 						},
@@ -159,7 +165,7 @@ export class CompareBranchNode extends ViewNode<BranchesView | CommitsView | Rep
 		};
 		item.contextValue = `${ContextValues.CompareBranch}${this.branch.current ? '+current' : ''}+${
 			this.comparisonType
-		}${this._compareWith == null ? '' : '+comparing'}`;
+		}${this._compareWith == null ? '' : '+comparing'}${this.root ? '+root' : ''}`;
 		item.description = description;
 		item.iconPath = new ThemeIcon('git-compare');
 		item.id = this.id;
@@ -192,6 +198,8 @@ export class CompareBranchNode extends ViewNode<BranchesView | CommitsView | Rep
 	async setComparisonType(comparisonType: Exclude<ViewShowBranchComparison, false>) {
 		if (this._compareWith != null) {
 			await this.updateCompareWith({ ...this._compareWith, type: comparisonType });
+		} else {
+			this.showComparison = comparisonType;
 		}
 
 		this._children = undefined;
@@ -199,8 +207,7 @@ export class CompareBranchNode extends ViewNode<BranchesView | CommitsView | Rep
 	}
 
 	private get comparisonType() {
-		// eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
-		return this._compareWith?.type ?? (this.view.config.showBranchComparison || ViewShowBranchComparison.Working);
+		return this._compareWith?.type ?? this.showComparison;
 	}
 
 	private get compareWithWorkingTree() {
@@ -216,10 +223,7 @@ export class CompareBranchNode extends ViewNode<BranchesView | CommitsView | Rep
 				allowEnteringRefs: true,
 				picked: this.branch.ref,
 				// checkmarks: true,
-				sort: {
-					branches: { current: true, orderBy: BranchSorting.DateDesc },
-					tags: { orderBy: TagSorting.DateDesc },
-				},
+				sort: { branches: { current: true }, tags: {} },
 			},
 		);
 		if (pick == null || pick instanceof CommandQuickPickItem) return;
@@ -328,8 +332,7 @@ export class CompareBranchNode extends ViewNode<BranchesView | CommitsView | Rep
 			this._compareWith = {
 				ref: compareWith,
 				notation: undefined,
-				// eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
-				type: this.view.config.showBranchComparison || ViewShowBranchComparison.Working,
+				type: this.showComparison,
 			};
 		} else {
 			this._compareWith = compareWith;

@@ -17,6 +17,7 @@ export enum BuiltInCommands {
 	Open = 'vscode.open',
 	OpenFolder = 'vscode.openFolder',
 	OpenInTerminal = 'openInTerminal',
+	OpenWith = 'vscode.openWith',
 	NextEditor = 'workbench.action.nextEditor',
 	PreviewHtml = 'vscode.previewHtml',
 	RevealLine = 'revealLine',
@@ -26,13 +27,15 @@ export enum BuiltInCommands {
 }
 
 export enum ContextKeys {
+	ActionPrefix = 'gitlens:action:',
 	ActiveFileStatus = 'gitlens:activeFileStatus',
 	AnnotationStatus = 'gitlens:annotationStatus',
 	DisabledToggleCodeLens = 'gitlens:disabledToggleCodeLens',
 	Disabled = 'gitlens:disabled',
 	Enabled = 'gitlens:enabled',
-	HasRemotes = 'gitlens:hasRemotes',
 	HasConnectedRemotes = 'gitlens:hasConnectedRemotes',
+	HasRemotes = 'gitlens:hasRemotes',
+	HasRichRemotes = 'gitlens:hasRichRemotes',
 	Key = 'gitlens:key',
 	Readonly = 'gitlens:readonly',
 	ViewsCanCompare = 'gitlens:views:canCompare',
@@ -51,6 +54,22 @@ export enum ContextKeys {
 
 export function setContext(key: ContextKeys | string, value: any) {
 	return commands.executeCommand(BuiltInCommands.SetContext, key, value);
+}
+
+export enum Colors {
+	GutterBackgroundColor = 'gitlens.gutterBackgroundColor',
+	GutterForegroundColor = 'gitlens.gutterForegroundColor',
+	GutterUncommittedForegroundColor = 'gitlens.gutterUncommittedForegroundColor',
+	TrailingLineBackgroundColor = 'gitlens.trailingLineBackgroundColor',
+	TrailingLineForegroundColor = 'gitlens.trailingLineForegroundColor',
+	LineHighlightBackgroundColor = 'gitlens.lineHighlightBackgroundColor',
+	LineHighlightOverviewRulerColor = 'gitlens.lineHighlightOverviewRulerColor',
+	ClosedPullRequestIconColor = 'gitlens.closedPullRequestIconColor',
+	OpenPullRequestIconColor = 'gitlens.openPullRequestIconColor',
+	MergedPullRequestIconColor = 'gitlens.mergedPullRequestIconColor',
+	UnpushlishedChangesIconColor = 'gitlens.unpushlishedChangesIconColor',
+	UnpublishedCommitIconColor = 'gitlens.unpublishedCommitIconColor',
+	UnpulledChangesIconColor = 'gitlens.unpulledChangesIconColor',
 }
 
 export enum DocumentSchemes {
@@ -125,19 +144,24 @@ export enum GlyphChars {
 	SpaceThinnest = '\u200A',
 	SquareWithBottomShadow = '\u274F',
 	SquareWithTopShadow = '\u2750',
+	Warning = '\u26a0',
 	ZeroWidthSpace = '\u200b',
 }
 
 export enum SyncedState {
-	Version = 'gitlens:synced:version',
+	DisallowConnectionPrefix = 'gitlens:disallow:connection:',
 	UpdatesViewVisible = 'gitlens:views:updates:visible',
+	Version = 'gitlens:synced:version',
 	WelcomeViewVisible = 'gitlens:views:welcome:visible',
 }
 
 export enum GlobalState {
-	DeprecatedVersion = 'gitlensVersion',
 	Avatars = 'gitlens:avatars',
+	PendingWelcomeOnFocus = 'gitlens:pendingWelcomeOnFocus',
+	PendingWhatsNewOnFocus = 'gitlens:pendingWhatsNewOnFocus',
 	Version = 'gitlens:version',
+
+	Deprecated_Version = 'gitlensVersion',
 }
 
 export const ImageMimetypes: Record<string, string> = {
@@ -198,18 +222,20 @@ export interface PinnedItems {
 	[id: string]: PinnedItem;
 }
 
-export interface StarredBranches {
+export interface Starred {
 	[id: string]: boolean;
 }
 
-export interface StarredRepositories {
-	[id: string]: boolean;
+export interface Usage {
+	[id: string]: number;
 }
 
 export enum WorkspaceState {
 	BranchComparisons = 'gitlens:branch:comparisons',
+	ConnectedPrefix = 'gitlens:connected:',
 	DefaultRemote = 'gitlens:remote:default',
 	DisallowConnectionPrefix = 'gitlens:disallow:connection:',
+	GitCommandPaletteUsage = 'gitlens:gitComandPalette:usage',
 	StarredBranches = 'gitlens:starred:branches',
 	StarredRepositories = 'gitlens:starred:repositories',
 	ViewsRepositoriesAutoRefresh = 'gitlens:views:repositories:autoRefresh',

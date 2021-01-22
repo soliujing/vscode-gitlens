@@ -1,8 +1,9 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 'use strict';
 import * as paths from 'path';
+import { TextDecoder } from 'util';
 import * as iconv from 'iconv-lite';
-import { window } from 'vscode';
+import { Uri, window, workspace } from 'vscode';
 import { GlyphChars } from '../constants';
 import { Container } from '../container';
 import { Logger } from '../logger';
@@ -10,7 +11,7 @@ import { Objects, Strings } from '../system';
 import { findGitPath, GitLocation } from './locator';
 import { fsExists, run, RunError, RunOptions } from './shell';
 import { GitBranchParser, GitLogParser, GitReflogParser, GitStashParser, GitTagParser } from './parsers/parsers';
-import { GitFileStatus, GitRevision } from './models/models';
+import { GitRevision } from './models/models';
 
 export * from './models/models';
 export * from './parsers/parsers';
@@ -19,12 +20,15 @@ export * from './remotes/provider';
 export * from './search';
 export { RunError } from './shell';
 
-export type GitDiffFilter = Exclude<GitFileStatus, '!' | '?'>;
+export type GitDiffFilter = 'A' | 'C' | 'D' | 'M' | 'R' | 'T' | 'U' | 'X' | 'B' | '*';
 
 const emptyArray = (Object.freeze([]) as any) as any[];
 const emptyObj = Object.freeze({});
 const emptyStr = '';
+export const maxGitCliLength = 30000;
 const slash = '/';
+
+const textDecoder = new TextDecoder('utf8');
 
 // This is a root sha of all git repo's if using sha1
 const rootSha = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
@@ -376,21 +380,28 @@ export namespace Git {
 		);
 	}
 
-	export function branch__contains(
+	export function branch__containsOrPointsAt(
 		repoPath: string,
 		ref: string,
-		{ name = undefined, remotes = false }: { name?: string; remotes?: boolean } = {},
+		{
+			mode = 'contains',
+			name = undefined,
+			remotes = false,
+		}: { mode?: 'contains' | 'pointsAt'; name?: string; remotes?: boolean } = {},
 	) {
 		const params = ['branch'];
 		if (remotes) {
 			params.push('-r');
 		}
-		params.push('--contains', ref);
+		params.push(mode === 'pointsAt' ? `--points-at=${ref}` : `--contains=${ref}`, '--format=%(refname:short)');
 		if (name != null) {
 			params.push(name);
 		}
 
-		return git<string>({ cwd: repoPath, configs: ['-c', 'color.branch=false'] }, ...params);
+		return git<string>(
+			{ cwd: repoPath, configs: ['-c', 'color.branch=false'], errors: GitErrorHandling.Ignore },
+			...params,
+		);
 	}
 
 	export function check_ignore(repoPath: string, ...files: string[]) {
@@ -671,34 +682,44 @@ export namespace Git {
 		repoPath: string,
 		options:
 			| { all?: boolean; branch?: undefined; prune?: boolean; remote?: string }
-			| { all?: undefined; branch: string; prune?: undefined; remote: string; upstream: string } = {},
+			| {
+					all?: undefined;
+					branch: string;
+					prune?: undefined;
+					pull?: boolean;
+					remote: string;
+					upstream: string;
+			  } = {},
 	): Promise<void> {
 		const params = ['fetch'];
-		if (options.branch) {
-			params.push('-u', options.remote, `${options.upstream}:${options.branch}`);
-
-			try {
-				void (await git<string>({ cwd: repoPath }, ...params));
-				return;
-			} catch (ex) {
-				const msg: string = ex?.toString() ?? '';
-				if (GitErrors.noFastForward.test(msg)) {
-					void window.showErrorMessage(
-						`Unable to pull the '${options.branch}' branch, as it can't be fast-forwarded.`,
-					);
-
-					return;
-				}
-
-				throw ex;
-			}
-		}
 
 		if (options.prune) {
 			params.push('--prune');
 		}
 
-		if (options.remote) {
+		if (options.branch && options.remote) {
+			if (options.upstream && options.pull) {
+				params.push('-u', options.remote, `${options.upstream}:${options.branch}`);
+
+				try {
+					void (await git<string>({ cwd: repoPath }, ...params));
+					return;
+				} catch (ex) {
+					const msg: string = ex?.toString() ?? '';
+					if (GitErrors.noFastForward.test(msg)) {
+						void window.showErrorMessage(
+							`Unable to pull the '${options.branch}' branch, as it can't be fast-forwarded.`,
+						);
+
+						return;
+					}
+
+					throw ex;
+				}
+			} else {
+				params.push(options.remote, options.branch);
+			}
+		} else if (options.remote) {
 			params.push(options.remote);
 		} else if (options.all) {
 			params.push('--all');
@@ -1107,8 +1128,26 @@ export namespace Git {
 					return [ex.stdout, undefined];
 				}
 
-				const defaultBranch = await config__get('init.defaultBranch', repoPath, { local: true });
-				return [defaultBranch ?? 'main', undefined];
+				const defaultBranch = (await config__get('init.defaultBranch', repoPath, { local: true })) ?? 'main';
+				const branchConfig = await config__get_regex(`branch\\.${defaultBranch}\\.+`, repoPath, {
+					local: true,
+				});
+
+				let remote;
+				let remoteBranch;
+
+				if (branchConfig) {
+					let match = /^branch\..+\.remote\s(.+)$/m.exec(branchConfig);
+					if (match != null) {
+						remote = match[1];
+					}
+
+					match = /^branch\..+\.merge\srefs\/heads\/(.+)$/m.exec(branchConfig);
+					if (match != null) {
+						remoteBranch = match[1];
+					}
+				}
+				return [`${defaultBranch}${remote && remoteBranch ? `\n${remote}/${remoteBranch}` : ''}`, undefined];
 			}
 
 			if (GitWarnings.headNotABranch.test(msg)) {
@@ -1168,7 +1207,7 @@ export namespace Git {
 	}
 
 	export function shortlog(repoPath: string) {
-		return git<string>({ cwd: repoPath }, 'shortlog', '-sne', '--all', '--no-merges');
+		return git<string>({ cwd: repoPath }, 'shortlog', '-sne', '--all', '--no-merges', 'HEAD');
 	}
 
 	export async function show<TOut extends string | Buffer>(
@@ -1288,18 +1327,19 @@ export namespace Git {
 		);
 	}
 
-	export function stash__push(
+	export async function stash__push(
 		repoPath: string,
 		message?: string,
 		{
 			includeUntracked,
 			keepIndex,
 			pathspecs,
-		}: { includeUntracked?: boolean; keepIndex?: boolean; pathspecs?: string[] } = {},
-	) {
+			stdin,
+		}: { includeUntracked?: boolean; keepIndex?: boolean; pathspecs?: string[]; stdin?: boolean } = {},
+	): Promise<void> {
 		const params = ['stash', 'push'];
 
-		if (includeUntracked || (pathspecs !== undefined && pathspecs.length !== 0)) {
+		if (includeUntracked || (pathspecs != null && pathspecs.length !== 0)) {
 			params.push('-u');
 		}
 
@@ -1311,12 +1351,23 @@ export namespace Git {
 			params.push('-m', message);
 		}
 
+		if (stdin && pathspecs != null && pathspecs.length !== 0) {
+			void (await git<string>(
+				{ cwd: repoPath, stdin: pathspecs.join('\0') },
+				...params,
+				'--pathspec-from-file=-',
+				'--pathspec-file-nul',
+			));
+
+			return;
+		}
+
 		params.push('--');
-		if (pathspecs !== undefined && pathspecs.length !== 0) {
+		if (pathspecs != null && pathspecs.length !== 0) {
 			params.push(...pathspecs);
 		}
 
-		return git<string>({ cwd: repoPath }, ...params);
+		void (await git<string>({ cwd: repoPath }, ...params));
 	}
 
 	export function status(
@@ -1364,5 +1415,38 @@ export namespace Git {
 
 	export function tag(repoPath: string) {
 		return git<string>({ cwd: repoPath }, 'tag', '-l', `--format=${GitTagParser.defaultFormat}`);
+	}
+
+	export async function readDotGitFile(
+		repoPath: string,
+		paths: string[],
+		options?: { numeric?: false; throw?: boolean; trim?: boolean },
+	): Promise<string | undefined>;
+	export async function readDotGitFile(
+		repoPath: string,
+		path: string[],
+		options?: { numeric: true; throw?: boolean; trim?: boolean },
+	): Promise<number | undefined>;
+	export async function readDotGitFile(
+		repoPath: string,
+		pathParts: string[],
+		options?: { numeric?: boolean; throw?: boolean; trim?: boolean },
+	): Promise<string | number | undefined> {
+		try {
+			const bytes = await workspace.fs.readFile(Uri.file(paths.join(...[repoPath, '.git', ...pathParts])));
+			let contents = textDecoder.decode(bytes);
+			contents = options?.trim ?? true ? contents.trim() : contents;
+
+			if (options?.numeric) {
+				const number = Number.parseInt(contents, 10);
+				return isNaN(number) ? undefined : number;
+			}
+
+			return contents;
+		} catch (ex) {
+			if (options?.throw) throw ex;
+
+			return undefined;
+		}
 	}
 }

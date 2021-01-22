@@ -35,6 +35,10 @@ export class AzureDevOpsRemote extends RemoteProvider {
 			}
 		}
 
+		// Azure DevOps allows projects and repository names with spaces. In that situation,
+		// the `path` will be previously encoded during git clone
+		// revert that encoding to avoid double-encoding by gitlens during copy remote and open remote
+		path = decodeURIComponent(path);
 		super(domain, path, protocol, name);
 	}
 
@@ -58,6 +62,10 @@ export class AzureDevOpsRemote extends RemoteProvider {
 		return 'vsts';
 	}
 
+	get id() {
+		return 'azure-devops';
+	}
+
 	get name() {
 		return 'Azure DevOps';
 	}
@@ -70,13 +78,12 @@ export class AzureDevOpsRemote extends RemoteProvider {
 		return this._displayPath;
 	}
 
-	// eslint-disable-next-line @typescript-eslint/require-await
 	async getLocalInfoFromRemoteUri(
 		repository: Repository,
 		uri: Uri,
 		options?: { validate?: boolean },
 	): Promise<{ uri: Uri; startLine?: number; endLine?: number } | undefined> {
-		if (uri.authority !== this.domain) return undefined;
+		if (uri.authority !== this.domain) return Promise.resolve(undefined);
 		// if ((options?.validate ?? true) && !uri.path.startsWith(`/${this.path}/`)) return undefined;
 
 		let startLine;
@@ -95,12 +102,14 @@ export class AzureDevOpsRemote extends RemoteProvider {
 		}
 
 		const match = fileRegex.exec(uri.query);
-		if (match == null) return undefined;
+		if (match == null) return Promise.resolve(undefined);
 
 		const [, path] = match;
 
 		const absoluteUri = repository.toAbsoluteUri(path, { validate: options?.validate });
-		return absoluteUri != null ? { uri: absoluteUri, startLine: startLine, endLine: endLine } : undefined;
+		return Promise.resolve(
+			absoluteUri != null ? { uri: absoluteUri, startLine: startLine, endLine: endLine } : undefined,
+		);
 	}
 
 	protected getUrlForBranches(): string {
@@ -131,8 +140,8 @@ export class AzureDevOpsRemote extends RemoteProvider {
 			line = '';
 		}
 
-		if (sha) return `${this.baseUrl}/commit/${sha}/?_a=contents&path=%2F${fileName}${line}`;
-		if (branch) return `${this.baseUrl}/?path=%2F${fileName}&version=GB${branch}&_a=contents${line}`;
-		return `${this.baseUrl}?path=%2F${fileName}${line}`;
+		if (sha) return `${this.baseUrl}/commit/${sha}/?_a=contents&path=/${fileName}${line}`;
+		if (branch) return `${this.baseUrl}/?path=/${fileName}&version=GB${branch}&_a=contents${line}`;
+		return `${this.baseUrl}?path=/${fileName}${line}`;
 	}
 }

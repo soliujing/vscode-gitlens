@@ -1,16 +1,16 @@
 'use strict';
-import { ThemeColor, ThemeIcon, TreeItem, TreeItemCollapsibleState, window } from 'vscode';
+import { MarkdownString, ThemeColor, ThemeIcon, TreeItem, TreeItemCollapsibleState, window } from 'vscode';
 import { BranchNode } from './branchNode';
 import { BranchTrackingStatusFilesNode } from './branchTrackingStatusFilesNode';
 import { CommitNode } from './commitNode';
 import { LoadMoreNode } from './common';
+import { Colors } from '../../constants';
 import { Container } from '../../container';
 import { GitBranch, GitLog, GitRemote, GitRevision, GitTrackingState } from '../../git/git';
 import { GitUri } from '../../git/gitUri';
 import { insertDateMarkers } from './helpers';
-import { RepositoriesView } from '../repositoriesView';
-import { Dates, debug, gate, Iterables, memoize, Strings } from '../../system';
-import { ViewsWithFiles } from '../viewBase';
+import { Dates, debug, gate, Iterables, Strings } from '../../system';
+import { ViewsWithCommits } from '../viewBase';
 import { ContextValues, PageableViewNode, ViewNode } from './viewNode';
 
 export interface BranchTrackingStatus {
@@ -20,7 +20,7 @@ export interface BranchTrackingStatus {
 	upstream?: string;
 }
 
-export class BranchTrackingStatusNode extends ViewNode<ViewsWithFiles> implements PageableViewNode {
+export class BranchTrackingStatusNode extends ViewNode<ViewsWithCommits> implements PageableViewNode {
 	static key = ':status-branch:upstream';
 	static getId(
 		repoPath: string,
@@ -32,16 +32,25 @@ export class BranchTrackingStatusNode extends ViewNode<ViewsWithFiles> implement
 		return `${BranchNode.getId(repoPath, name, root)}${this.key}(${upstream ?? ''}):${upstreamType}`;
 	}
 
+	private readonly options: {
+		showAheadCommits?: boolean;
+	};
+
 	constructor(
-		view: ViewsWithFiles,
+		view: ViewsWithCommits,
 		parent: ViewNode,
 		public readonly branch: GitBranch,
 		public readonly status: BranchTrackingStatus,
 		public readonly upstreamType: 'ahead' | 'behind' | 'same' | 'none',
-		// Specifies that the node is shown as a root under the repository node
-		private readonly root: boolean = false,
+		// Specifies that the node is shown as a root
+		public readonly root: boolean = false,
+		options?: {
+			showAheadCommits?: boolean;
+		},
 	) {
 		super(GitUri.fromRepoPath(status.repoPath), view, parent);
+
+		this.options = { showAheadCommits: false, ...options };
 	}
 
 	get id(): string {
@@ -80,7 +89,15 @@ export class BranchTrackingStatusNode extends ViewNode<ViewsWithFiles> implement
 		}
 
 		const children = [];
-		if (!this.isReposView && this.status.upstream && this.upstreamType === 'ahead' && this.status.state.ahead > 0) {
+
+		let showFiles = true;
+		if (
+			!this.options.showAheadCommits &&
+			this.upstreamType === 'ahead' &&
+			this.status.upstream &&
+			this.status.state.ahead > 0
+		) {
+			showFiles = false;
 			// TODO@eamodio fix this
 			children.push(
 				...(await new BranchTrackingStatusFilesNode(
@@ -109,13 +126,28 @@ export class BranchTrackingStatusNode extends ViewNode<ViewsWithFiles> implement
 			}
 		}
 
+		if (showFiles) {
+			children.splice(
+				0,
+				0,
+				new BranchTrackingStatusFilesNode(
+					this.view,
+					this,
+					this.branch,
+					this.status as Required<BranchTrackingStatus>,
+					this.upstreamType,
+					this.root,
+				),
+			);
+		}
+
 		return children;
 	}
 
 	async getTreeItem(): Promise<TreeItem> {
 		let lastFetched = 0;
 
-		if (this.root && !this.isReposView && this.upstreamType !== 'none') {
+		if (this.upstreamType !== 'none') {
 			const repo = await Container.git.getRepository(this.repoPath);
 			lastFetched = (await repo?.getLastFetched()) ?? 0;
 		}
@@ -134,19 +166,19 @@ export class BranchTrackingStatusNode extends ViewNode<ViewsWithFiles> implement
 					remote?.provider?.name ? ` on ${remote?.provider.name}` : ''
 				}`;
 				description = Strings.pluralize('commit', this.status.state.ahead);
-				tooltip = `Branch ${this.branch.name} is ${Strings.pluralize(
+				tooltip = `Branch $(git-branch) ${this.branch.name} is ${Strings.pluralize(
 					'commit',
 					this.status.state.ahead,
-				)} ahead of ${this.status.upstream}${remote?.provider?.name ? ` on ${remote.provider.name}` : ''}`;
+					{ infix: '$(arrow-up) ' },
+				)} ahead of $(git-branch) ${this.status.upstream}${
+					remote?.provider?.name ? ` on ${remote.provider.name}` : ''
+				}`;
 
-				// collapsibleState = !this.isReposView
-				// 	? TreeItemCollapsibleState.Expanded
-				// 	: TreeItemCollapsibleState.Collapsed;
 				collapsibleState = TreeItemCollapsibleState.Collapsed;
 				contextValue = this.root
 					? ContextValues.StatusAheadOfUpstream
 					: ContextValues.BranchStatusAheadOfUpstream;
-				icon = new ThemeIcon('cloud-upload', new ThemeColor('gitlens.viewChangesToPushIconColor'));
+				icon = new ThemeIcon('cloud-upload', new ThemeColor(Colors.UnpushlishedChangesIconColor));
 
 				break;
 			}
@@ -157,16 +189,19 @@ export class BranchTrackingStatusNode extends ViewNode<ViewsWithFiles> implement
 					remote?.provider?.name ? ` on ${remote.provider.name}` : ''
 				}`;
 				description = Strings.pluralize('commit', this.status.state.behind);
-				tooltip = `Branch ${this.branch.name} is ${Strings.pluralize(
+				tooltip = `Branch $(git-branch) ${this.branch.name} is ${Strings.pluralize(
 					'commit',
 					this.status.state.behind,
-				)} behind ${this.status.upstream}${remote?.provider?.name ? ` on ${remote.provider.name}` : ''}`;
+					{ infix: '$(arrow-down) ' },
+				)} behind $(git-branch) ${this.status.upstream}${
+					remote?.provider?.name ? ` on ${remote.provider.name}` : ''
+				}`;
 
 				collapsibleState = TreeItemCollapsibleState.Collapsed;
 				contextValue = this.root
 					? ContextValues.StatusBehindUpstream
 					: ContextValues.BranchStatusBehindUpstream;
-				icon = new ThemeIcon('cloud-download', new ThemeColor('gitlens.viewChangesToPullIconColor'));
+				icon = new ThemeIcon('cloud-download', new ThemeColor(Colors.UnpulledChangesIconColor));
 
 				break;
 			}
@@ -176,29 +211,35 @@ export class BranchTrackingStatusNode extends ViewNode<ViewsWithFiles> implement
 				label = `Up to date with ${remote?.name ?? GitBranch.getRemote(this.status.upstream!)}${
 					remote?.provider?.name ? ` on ${remote.provider.name}` : ''
 				}`;
-				description = `Last fetched ${Dates.getFormatter(new Date(lastFetched)).fromNow()}`;
-				tooltip = `Branch ${this.branch.name} is up to date with ${this.status.upstream}${
-					remote?.provider?.name ? ` on ${remote.provider.name}` : ''
-				}`;
+				description = lastFetched ? `Last fetched ${Dates.getFormatter(new Date(lastFetched)).fromNow()}` : '';
+				tooltip = `Branch $(git-branch) ${this.branch.name} is up to date with $(git-branch) ${
+					this.status.upstream
+				}${remote?.provider?.name ? ` on ${remote.provider.name}` : ''}`;
 
 				collapsibleState = TreeItemCollapsibleState.None;
-				contextValue = this.root ? ContextValues.StatusSameAsUpstream : undefined;
+				contextValue = this.root
+					? ContextValues.StatusSameAsUpstream
+					: ContextValues.BranchStatusSameAsUpstream;
 				icon = new ThemeIcon('cloud');
 
 				break;
 			}
 			case 'none': {
-				const providers = GitRemote.getHighlanderProviders(
-					await Container.git.getRemotes(this.branch.repoPath),
-				);
+				const remotes = await Container.git.getRemotes(this.branch.repoPath);
+				const providers = GitRemote.getHighlanderProviders(remotes);
 				const providerName = providers?.length ? providers[0].name : undefined;
 
 				label = `Publish ${this.branch.name} to ${providerName ?? 'a remote'}`;
-				tooltip = `Branch ${this.branch.name} hasn't been published to ${providerName ?? 'a remote'}`;
+				tooltip = `Branch $(git-branch) ${this.branch.name} hasn't been published to ${
+					providerName ?? 'a remote'
+				}`;
 
 				collapsibleState = TreeItemCollapsibleState.None;
-				contextValue = this.root ? ContextValues.StatusNoUpstream : undefined;
-				icon = new ThemeIcon('cloud-upload', new ThemeColor('gitlens.viewChangesToPushIconColor'));
+				contextValue = this.root ? ContextValues.StatusNoUpstream : ContextValues.BranchStatusNoUpstream;
+				icon = new ThemeIcon(
+					'cloud-upload',
+					remotes.length ? new ThemeColor(Colors.UnpushlishedChangesIconColor) : undefined,
+				);
 
 				break;
 			}
@@ -209,17 +250,12 @@ export class BranchTrackingStatusNode extends ViewNode<ViewsWithFiles> implement
 		item.contextValue = contextValue;
 		item.description = description;
 		if (lastFetched) {
-			tooltip += `\nLast fetched ${Dates.getFormatter(new Date(lastFetched)).fromNow()}`;
+			tooltip += `\n\nLast fetched ${Dates.getFormatter(new Date(lastFetched)).fromNow()}`;
 		}
 		item.iconPath = icon;
-		item.tooltip = tooltip;
+		item.tooltip = new MarkdownString(tooltip, true);
 
 		return item;
-	}
-
-	@memoize()
-	private get isReposView() {
-		return this.view instanceof RepositoriesView;
 	}
 
 	@gate()

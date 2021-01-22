@@ -74,7 +74,7 @@ export namespace BranchQuickPickItem {
 			if (remote !== undefined) {
 				let left;
 				let right;
-				for (const { type } of remote.types) {
+				for (const { type } of remote.urls) {
 					if (type === GitRemoteType.Fetch) {
 						left = true;
 
@@ -118,7 +118,7 @@ export namespace BranchQuickPickItem {
 		const checked =
 			options.checked || (options.checked == null && options.current === 'checkmark' && branch.current);
 		const item: BranchQuickPickItem = {
-			label: `${Strings.pad('$(git-branch)', 0, 2)}${branch.name}${
+			label: `${Strings.pad('$(git-branch)', 0, 2)}${branch.starred ? '$(star-full) ' : ''}${branch.name}${
 				checked ? `${GlyphChars.Space.repeat(2)}$(check)${GlyphChars.Space}` : ''
 			}`,
 			description: description,

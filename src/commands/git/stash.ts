@@ -7,6 +7,7 @@ import { GitUri } from '../../git/gitUri';
 import { GitActions, GitCommandsCommand } from '../gitCommands';
 import {
 	appendReposToTitle,
+	AsyncStepResultGenerator,
 	PartialStepState,
 	pickRepositoryStep,
 	pickStashStep,
@@ -496,7 +497,7 @@ export class StashGitCommand extends QuickCommand<State> {
 			} catch (ex) {
 				Logger.error(ex, context.title);
 
-				const msg: string = ex?.toString() ?? '';
+				const msg: string = ex?.message ?? ex?.toString() ?? '';
 				if (msg.includes('newer version of Git')) {
 					void window.showErrorMessage(`Unable to stash changes. ${msg}`);
 
@@ -510,7 +511,10 @@ export class StashGitCommand extends QuickCommand<State> {
 		}
 	}
 
-	private async *pushCommandInputMessageStep(state: PushStepState, context: Context): StepResultGenerator<string> {
+	private async *pushCommandInputMessageStep(
+		state: PushStepState,
+		context: Context,
+	): AsyncStepResultGenerator<string> {
 		const step = QuickCommand.createInputStep({
 			title: appendReposToTitle(
 				context.title,

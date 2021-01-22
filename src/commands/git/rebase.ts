@@ -4,6 +4,7 @@ import { Container } from '../../container';
 import { GitBranch, GitLog, GitReference, GitRevision, Repository } from '../../git/git';
 import {
 	appendReposToTitle,
+	AsyncStepResultGenerator,
 	PartialStepState,
 	pickBranchOrTagStep,
 	pickCommitStep,
@@ -13,7 +14,6 @@ import {
 	QuickPickStep,
 	StepGenerator,
 	StepResult,
-	StepResultGenerator,
 	StepSelection,
 	StepState,
 } from '../quickCommand';
@@ -78,27 +78,16 @@ export class RebaseGitCommand extends QuickCommand<State> {
 			await Container.rebaseEditor.enableForNextUse();
 
 			let editor;
-			if (env.remoteName) {
-				switch (env.appName) {
-					case 'Visual Studio Code - Insiders':
-						editor = 'code-insiders --wait --reuse-window';
-						break;
-					case 'Visual Studio Code - Exploration':
-						editor = 'code-exploration --wait --reuse-window';
-						break;
-					default:
-						editor = 'code --wait --reuse-window';
-						break;
-				}
-			} else {
-				let execPath = process.execPath.replace(/\\/g, '/');
-				if (process.platform === 'darwin') {
-					const index = execPath.indexOf('.app/Contents/');
-					if (index !== -1) {
-						execPath = `${execPath.substring(0, index)}.app/Contents/MacOS/Electron`;
-					}
-				}
-				editor = `'${execPath}' --wait --reuse-window`;
+			switch (env.appName) {
+				case 'Visual Studio Code - Insiders':
+					editor = 'code-insiders --wait --reuse-window';
+					break;
+				case 'Visual Studio Code - Exploration':
+					editor = 'code-exploration --wait --reuse-window';
+					break;
+				default:
+					editor = 'code --wait --reuse-window';
+					break;
 			}
 
 			configs = ['-c', `sequence.editor="${editor}"`];
@@ -226,7 +215,7 @@ export class RebaseGitCommand extends QuickCommand<State> {
 		return state.counter < 0 ? StepResult.Break : undefined;
 	}
 
-	private async *confirmStep(state: RebaseStepState, context: Context): StepResultGenerator<Flags[]> {
+	private async *confirmStep(state: RebaseStepState, context: Context): AsyncStepResultGenerator<Flags[]> {
 		const aheadBehind = await Container.git.getAheadBehindCommitCount(state.repo.path, [
 			state.reference.refType === 'revision'
 				? GitRevision.createRange(state.reference.ref, context.destination.ref)

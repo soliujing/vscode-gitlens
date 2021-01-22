@@ -2,17 +2,25 @@
 import { graphql } from '@octokit/graphql';
 import { Logger } from '../logger';
 import { debug } from '../system';
-import { AuthenticationError, ClientError, IssueOrPullRequest, PullRequest, PullRequestState } from '../git/git';
+import {
+	AuthenticationError,
+	ClientError,
+	IssueOrPullRequest,
+	PullRequest,
+	PullRequestState,
+	RichRemoteProvider,
+} from '../git/git';
 import { Account } from '../git/models/author';
 
 export class GitHubApi {
 	@debug({
 		args: {
+			0: (p: RichRemoteProvider) => p.name,
 			1: _ => '<token>',
 		},
 	})
 	async getAccountForCommit(
-		provider: string,
+		provider: RichRemoteProvider,
 		token: string,
 		owner: string,
 		repo: string,
@@ -85,11 +93,12 @@ export class GitHubApi {
 
 	@debug({
 		args: {
+			0: (p: RichRemoteProvider) => p.name,
 			1: _ => '<token>',
 		},
 	})
 	async getAccountForEmail(
-		provider: string,
+		provider: RichRemoteProvider,
 		token: string,
 		owner: string,
 		repo: string,
@@ -158,11 +167,12 @@ export class GitHubApi {
 
 	@debug({
 		args: {
+			0: (p: RichRemoteProvider) => p.name,
 			1: _ => '<token>',
 		},
 	})
 	async getIssueOrPullRequest(
-		provider: string,
+		provider: RichRemoteProvider,
 		token: string,
 		owner: string,
 		repo: string,
@@ -227,11 +237,12 @@ export class GitHubApi {
 
 	@debug({
 		args: {
+			0: (p: RichRemoteProvider) => p.name,
 			1: _ => '<token>',
 		},
 	})
 	async getPullRequestForBranch(
-		provider: string,
+		provider: RichRemoteProvider,
 		token: string,
 		owner: string,
 		repo: string,
@@ -326,11 +337,12 @@ export class GitHubApi {
 
 	@debug({
 		args: {
+			0: (p: RichRemoteProvider) => p.name,
 			1: _ => '<token>',
 		},
 	})
 	async getPullRequestForCommit(
-		provider: string,
+		provider: RichRemoteProvider,
 		token: string,
 		owner: string,
 		repo: string,
@@ -451,7 +463,7 @@ interface GitHubPullRequest {
 }
 
 export namespace GitHubPullRequest {
-	export function from(pr: GitHubPullRequest, provider: string): PullRequest {
+	export function from(pr: GitHubPullRequest, provider: RichRemoteProvider): PullRequest {
 		return new PullRequest(
 			provider,
 			{

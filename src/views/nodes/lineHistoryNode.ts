@@ -1,16 +1,19 @@
 'use strict';
 import { Disposable, Selection, TreeItem, TreeItemCollapsibleState, window } from 'vscode';
-import { CommitFileNode } from './commitFileNode';
 import { LoadMoreNode, MessageNode } from './common';
 import { Container } from '../../container';
+import { FileHistoryView } from '../fileHistoryView';
+import { FileRevisionAsCommitNode } from './fileRevisionAsCommitNode';
 import {
 	GitBranch,
 	GitCommitType,
 	GitFile,
+	GitFileIndexStatus,
 	GitLog,
 	GitLogCommit,
 	GitRevision,
 	RepositoryChange,
+	RepositoryChangeComparisonMode,
 	RepositoryChangeEvent,
 	RepositoryFileSystemChangeEvent,
 } from '../../git/git';
@@ -18,12 +21,14 @@ import { GitUri } from '../../git/gitUri';
 import { insertDateMarkers } from './helpers';
 import { Logger } from '../../logger';
 import { LineHistoryTrackerNode } from './lineHistoryTrackerNode';
+import { LineHistoryView } from '../lineHistoryView';
 import { RepositoryNode } from './repositoryNode';
 import { debug, gate, Iterables, memoize } from '../../system';
-import { View } from '../viewBase';
 import { ContextValues, PageableViewNode, SubscribeableViewNode, ViewNode } from './viewNode';
 
-export class LineHistoryNode extends SubscribeableViewNode implements PageableViewNode {
+export class LineHistoryNode
+	extends SubscribeableViewNode<FileHistoryView | LineHistoryView>
+	implements PageableViewNode {
 	static key = ':history:line';
 	static getId(repoPath: string, uri: string, selection: Selection): string {
 		return `${RepositoryNode.getId(repoPath)}${this.key}(${uri}[${selection.start.line},${
@@ -35,7 +40,7 @@ export class LineHistoryNode extends SubscribeableViewNode implements PageableVi
 
 	constructor(
 		uri: GitUri,
-		view: View,
+		view: FileHistoryView | LineHistoryView,
 		parent: ViewNode,
 		private readonly branch: GitBranch | undefined,
 		public readonly selection: Selection,
@@ -98,12 +103,13 @@ export class LineHistoryNode extends SubscribeableViewNode implements PageableVi
 					const status = await Container.git.getStatusForFile(this.uri.repoPath!, this.uri.fsPath);
 
 					const file: GitFile = {
+						conflictStatus: status?.conflictStatus,
 						fileName: commit.fileName,
-						indexStatus: status?.indexStatus ?? '?',
+						indexStatus: status?.indexStatus,
 						originalFileName: commit.originalFileName,
 						repoPath: this.uri.repoPath!,
-						status: 'M',
-						workingTreeStatus: status?.workingTreeStatus ?? '?',
+						status: status?.status ?? GitFileIndexStatus.Modified,
+						workingTreeStatus: status?.workingTreeStatus,
 					};
 
 					if (status?.workingTreeStatus != null && status?.indexStatus != null) {
@@ -118,7 +124,7 @@ export class LineHistoryNode extends SubscribeableViewNode implements PageableVi
 							commit.message,
 							commit.fileName,
 							[file],
-							'M',
+							GitFileIndexStatus.Modified,
 							commit.originalFileName,
 							commit.previousSha,
 							commit.originalFileName ?? commit.fileName,
@@ -127,8 +133,7 @@ export class LineHistoryNode extends SubscribeableViewNode implements PageableVi
 						children.splice(
 							0,
 							0,
-							new CommitFileNode(this.view, this, file, uncommitted, {
-								displayAsCommit: true,
+							new FileRevisionAsCommitNode(this.view, this, file, uncommitted, {
 								selection: selection,
 							}),
 						);
@@ -144,7 +149,7 @@ export class LineHistoryNode extends SubscribeableViewNode implements PageableVi
 							commit.message,
 							commit.fileName,
 							[file],
-							'M',
+							GitFileIndexStatus.Modified,
 							commit.originalFileName,
 							GitRevision.uncommittedStaged,
 							commit.originalFileName ?? commit.fileName,
@@ -153,8 +158,7 @@ export class LineHistoryNode extends SubscribeableViewNode implements PageableVi
 						children.splice(
 							0,
 							0,
-							new CommitFileNode(this.view, this, file, uncommitted, {
-								displayAsCommit: true,
+							new FileRevisionAsCommitNode(this.view, this, file, uncommitted, {
 								selection: selection,
 							}),
 						);
@@ -174,7 +178,7 @@ export class LineHistoryNode extends SubscribeableViewNode implements PageableVi
 							commit.message,
 							commit.fileName,
 							[file],
-							'M',
+							GitFileIndexStatus.Modified,
 							commit.originalFileName,
 							commit.previousSha,
 							commit.originalFileName ?? commit.fileName,
@@ -183,8 +187,7 @@ export class LineHistoryNode extends SubscribeableViewNode implements PageableVi
 						children.splice(
 							0,
 							0,
-							new CommitFileNode(this.view, this, file, uncommitted, {
-								displayAsCommit: true,
+							new FileRevisionAsCommitNode(this.view, this, file, uncommitted, {
 								selection: selection,
 							}),
 						);
@@ -201,9 +204,8 @@ export class LineHistoryNode extends SubscribeableViewNode implements PageableVi
 					Iterables.filterMap(
 						log.commits.values(),
 						c =>
-							new CommitFileNode(this.view, this, c.files[0], c, {
+							new FileRevisionAsCommitNode(this.view, this, c.files[0], c, {
 								branch: this.branch,
-								displayAsCommit: true,
 								selection: selection,
 								unpublished: unpublishedCommits?.has(c.ref),
 							}),
@@ -274,15 +276,19 @@ export class LineHistoryNode extends SubscribeableViewNode implements PageableVi
 
 	private onRepositoryChanged(e: RepositoryChangeEvent) {
 		if (
-			!e.changed(RepositoryChange.Index) &&
-			!e.changed(RepositoryChange.Heads) &&
-			!e.changed(RepositoryChange.Remotes) &&
-			!e.changed(RepositoryChange.Unknown)
+			!e.changed(
+				RepositoryChange.Index,
+				RepositoryChange.Heads,
+				RepositoryChange.Remotes,
+				RepositoryChange.Status,
+				RepositoryChange.Unknown,
+				RepositoryChangeComparisonMode.Any,
+			)
 		) {
 			return;
 		}
 
-		Logger.debug(`LineHistoryNode.onRepositoryChanged(${e.changes.join()}); triggering node refresh`);
+		Logger.debug(`LineHistoryNode.onRepositoryChanged(${e.toString()}); triggering node refresh`);
 
 		void this.triggerChange(true);
 	}
@@ -307,9 +313,10 @@ export class LineHistoryNode extends SubscribeableViewNode implements PageableVi
 	private async getLog(selection?: Selection) {
 		if (this._log == null) {
 			this._log = await Container.git.getLogForFile(this.uri.repoPath, this.uri.fsPath, {
+				all: false,
 				limit: this.limit ?? this.view.config.pageItemLimit,
-				ref: this.uri.sha,
 				range: selection ?? this.selection,
+				ref: this.uri.sha,
 				renames: false,
 			});
 		}

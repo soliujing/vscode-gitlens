@@ -55,12 +55,27 @@ export class GitRemote<TProvider extends RemoteProvider | undefined = RemoteProv
 		public readonly domain: string,
 		public readonly path: string,
 		public readonly provider: TProvider,
-		public readonly types: { type: GitRemoteType; url: string }[],
+		public readonly urls: { type: GitRemoteType; url: string }[],
 	) {}
 
 	get default() {
 		const defaultRemote = Container.context.workspaceState.get<string>(WorkspaceState.DefaultRemote);
 		return this.id === defaultRemote;
+	}
+
+	get url(): string | undefined {
+		let url;
+		for (const remoteUrl of this.urls) {
+			if (remoteUrl.type === GitRemoteType.Push) {
+				return remoteUrl.url;
+			}
+
+			if (url == null) {
+				url = remoteUrl.url;
+			}
+		}
+
+		return url;
 	}
 
 	async setAsDefault(state: boolean = true, updateViews: boolean = true) {

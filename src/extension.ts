@@ -1,20 +1,26 @@
 'use strict';
 import * as paths from 'path';
 import { commands, ExtensionContext, extensions, window, workspace } from 'vscode';
-import { Commands, registerCommands } from './commands';
+import { GitLensApi } from '../src/api/gitlens';
+import { Api } from './api/api';
+import { Commands, executeCommand, OpenPullRequestOnRemoteCommandArgs, registerCommands } from './commands';
 import { configuration, Configuration } from './configuration';
 import { ContextKeys, GlobalState, GlyphChars, setContext, SyncedState } from './constants';
 import { Container } from './container';
 import { Git, GitCommit } from './git/git';
 import { GitService } from './git/gitService';
 import { GitUri } from './git/gitUri';
-import { Logger, TraceLevel } from './logger';
+import { Logger } from './logger';
 import { Messages } from './messages';
 import { Strings, Versions } from './system';
 import { ViewNode } from './views/nodes';
 
-export async function activate(context: ExtensionContext) {
+let _context: ExtensionContext | undefined;
+
+export async function activate(context: ExtensionContext): Promise<GitLensApi | undefined> {
 	const start = process.hrtime();
+
+	_context = context;
 
 	let extensionId = 'eamodio.gitlens';
 	if (paths.basename(context.globalStorageUri.fsPath) === 'eamodio.gitlens-insiders') {
@@ -27,18 +33,14 @@ export async function activate(context: ExtensionContext) {
 
 			void Messages.showInsidersErrorMessage();
 
-			return;
+			return undefined;
 		}
 	}
 
 	// Pretend we are enabled (until we know otherwise) and set the view contexts to reduce flashing on load
 	void setContext(ContextKeys.Enabled, true);
 
-	context.globalState.setKeysForSync([
-		SyncedState.Version,
-		SyncedState.UpdatesViewVisible,
-		SyncedState.WelcomeViewVisible,
-	]);
+	setKeysForSync();
 
 	Logger.configure(context, configuration.get('outputLevel'), o => {
 		if (GitUri.is(o)) {
@@ -64,10 +66,10 @@ export async function activate(context: ExtensionContext) {
 	const syncedVersion = context.globalState.get<string>(SyncedState.Version);
 	const previousVersion =
 		context.globalState.get<string>(GlobalState.Version) ??
-		context.globalState.get<string>(GlobalState.DeprecatedVersion) ??
+		context.globalState.get<string>(GlobalState.Deprecated_Version) ??
 		syncedVersion;
 
-	if (Logger.level === TraceLevel.Debug || Logger.isDebugging) {
+	if (Logger.willLog('debug')) {
 		Logger.debug(
 			`GitLens (v${gitlensVersion}): syncedVersion=${syncedVersion}, previousVersion=${previousVersion}, ${
 				SyncedState.WelcomeViewVisible
@@ -105,7 +107,7 @@ export async function activate(context: ExtensionContext) {
 
 		void Messages.showGitDisabledErrorMessage();
 
-		return;
+		return undefined;
 	}
 
 	Configuration.configure(context);
@@ -127,17 +129,18 @@ export async function activate(context: ExtensionContext) {
 			);
 		}
 
-		return;
+		return undefined;
 	}
 
 	Container.initialize(extensionId, context, cfg);
 
 	registerCommands(context);
+	registerDefaultActionRunners(context);
 
 	const gitVersion = Git.getGitVersion();
 
 	notifyOnUnsupportedGitVersion(gitVersion);
-	void showWelcomeOrWhatsNew(gitlensVersion, previousVersion);
+	void showWelcomeOrWhatsNew(context, gitlensVersion, previousVersion);
 
 	void context.globalState.update(GlobalState.Version, gitlensVersion);
 
@@ -151,14 +154,13 @@ export async function activate(context: ExtensionContext) {
 			GlyphChars.Dot
 		} ${Strings.getDurationMilliseconds(start)} ms`,
 	);
+
+	const api = new Api();
+	return api;
 }
 
 export function deactivate() {
 	// nothing to do
-}
-
-export async function setEnabled(enabled: boolean): Promise<void> {
-	await Promise.all([setContext(ContextKeys.Enabled, enabled), setContext(ContextKeys.Disabled, !enabled)]);
 }
 
 // async function migrateSettings(context: ExtensionContext, previousVersion: string | undefined) {
@@ -174,23 +176,73 @@ export async function setEnabled(enabled: boolean): Promise<void> {
 // 	}
 // }
 
-function notifyOnUnsupportedGitVersion(version: string) {
+export async function setEnabled(enabled: boolean): Promise<void> {
+	await Promise.all([setContext(ContextKeys.Enabled, enabled), setContext(ContextKeys.Disabled, !enabled)]);
+}
+
+export function setKeysForSync(...keys: (SyncedState | string)[]) {
+	return _context?.globalState.setKeysForSync([
+		...keys,
+		SyncedState.UpdatesViewVisible,
+		SyncedState.Version,
+		SyncedState.WelcomeViewVisible,
+	]);
+}
+
+export function notifyOnUnsupportedGitVersion(version: string) {
 	if (GitService.compareGitVersion('2.7.2') !== -1) return;
 
 	// If git is less than v2.7.2
 	void Messages.showGitVersionUnsupportedErrorMessage(version, '2.7.2');
 }
 
-async function showWelcomeOrWhatsNew(version: string, previousVersion: string | undefined) {
+function registerDefaultActionRunners(context: ExtensionContext): void {
+	context.subscriptions.push(
+		Container.actionRunners.registerDefault('openPullRequest', {
+			label: 'Open on Remote',
+			run: async ctx => {
+				if (ctx.type !== 'openPullRequest') return;
+
+				void (await executeCommand<OpenPullRequestOnRemoteCommandArgs>(Commands.OpenPullRequestOnRemote, {
+					pr: { url: ctx.pullRequest.url },
+				}));
+			},
+		}),
+	);
+}
+
+async function showWelcomeOrWhatsNew(context: ExtensionContext, version: string, previousVersion: string | undefined) {
 	if (previousVersion == null) {
-		Logger.log('GitLens first-time install');
-		await commands.executeCommand(Commands.ShowWelcomePage);
+		Logger.log(`GitLens first-time install; window.focused=${window.state.focused}`);
+		if (Container.config.showWelcomeOnInstall === false) return;
+
+		if (window.state.focused) {
+			await context.globalState.update(GlobalState.PendingWelcomeOnFocus, undefined);
+			await commands.executeCommand(Commands.ShowWelcomePage);
+		} else {
+			// Save pending on window getting focus
+			await context.globalState.update(GlobalState.PendingWelcomeOnFocus, true);
+			const disposable = window.onDidChangeWindowState(e => {
+				if (!e.focused) return;
+
+				disposable.dispose();
+
+				// If the window is now focused and we are pending the welcome, clear the pending state and show the welcome
+				if (context.globalState.get(GlobalState.PendingWelcomeOnFocus) === true) {
+					void context.globalState.update(GlobalState.PendingWelcomeOnFocus, undefined);
+					if (Container.config.showWelcomeOnInstall) {
+						void commands.executeCommand(Commands.ShowWelcomePage);
+					}
+				}
+			});
+			context.subscriptions.push(disposable);
+		}
 
 		return;
 	}
 
 	if (previousVersion !== version) {
-		Logger.log(`GitLens upgraded from v${previousVersion} to v${version}`);
+		Logger.log(`GitLens upgraded from v${previousVersion} to v${version}; window.focused=${window.state.focused}`);
 	}
 
 	const [major, minor] = version.split('.').map(v => parseInt(v, 10));
@@ -205,6 +257,26 @@ async function showWelcomeOrWhatsNew(version: string, previousVersion: string | 
 	}
 
 	if (major !== prevMajor && Container.config.showWhatsNewAfterUpgrades) {
-		await Messages.showWhatsNewMessage(version);
+		if (window.state.focused) {
+			await context.globalState.update(GlobalState.PendingWhatsNewOnFocus, undefined);
+			await Messages.showWhatsNewMessage(version);
+		} else {
+			// Save pending on window getting focus
+			await context.globalState.update(GlobalState.PendingWhatsNewOnFocus, true);
+			const disposable = window.onDidChangeWindowState(e => {
+				if (!e.focused) return;
+
+				disposable.dispose();
+
+				// If the window is now focused and we are pending the what's new, clear the pending state and show the what's new
+				if (context.globalState.get(GlobalState.PendingWhatsNewOnFocus) === true) {
+					void context.globalState.update(GlobalState.PendingWhatsNewOnFocus, undefined);
+					if (Container.config.showWhatsNewAfterUpgrades) {
+						void Messages.showWhatsNewMessage(version);
+					}
+				}
+			});
+			context.subscriptions.push(disposable);
+		}
 	}
 }

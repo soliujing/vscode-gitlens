@@ -6,17 +6,6 @@
 		</div>
 
 		<p class="section__header-hint">Adds many helpful commands to the built-in menus &amp; toolbars</p>
-
-		<div class="section__header-info">
-			<i class="icon icon__info"></i>
-			<div>
-				<p>
-					Any changes to these settings will require a
-					<a class="command" title="Reload Window" href="command:workbench.action.reloadWindow">reload</a>
-					before they will take effect
-				</p>
-			</div>
-		</div>
 	</div>
 
 	<div class="section__collapsible">
@@ -77,7 +66,9 @@
 								data-setting-type="object"
 								disabled
 							/>
-							<label for="menus.editor.history">Add <i>Open File History</i> command</label>
+							<label for="menus.editor.history"
+								>Add <i>Open File History</i> and <i>Quick Open File History</i> commands</label
+							>
 						</div>
 					</div>
 
@@ -165,7 +156,7 @@
 								data-setting-type="object"
 								disabled
 							/>
-							<label for="menus.editorTab.remote">Add <i>Open File on Remote</i> command</label>
+							<label for="menus.editorTab.remote">Add <i>Open File on Remote *</i> commands</label>
 						</div>
 					</div>
 
@@ -179,7 +170,9 @@
 								data-setting-type="object"
 								disabled
 							/>
-							<label for="menus.editorTab.history">Add <i>Open File History</i> command</label>
+							<label for="menus.editorTab.history"
+								>Add <i>Open File History</i> and <i>Quick Open File History</i> commands</label
+							>
 						</div>
 					</div>
 				</div>
@@ -227,7 +220,21 @@
 								data-setting-type="object"
 								disabled
 							/>
-							<label for="menus.editorGroup.blame">Add <i>File Annotations</i> submenu</label>
+							<label for="menus.editorGroup.blame">Add </label>
+							<div class="select-container">
+								<select
+									id="fileAnnotations.command"
+									name="fileAnnotations.command"
+									data-setting
+									data-enablement="menus.editorGroup.blame"
+									disabled
+								>
+									<option value="null">File Annotations submenu</option>
+									<option value="blame"><i>Toggle File Blame</i> command</option>
+									<option value="heatmap"><i>Toggle File Heatmap</i> command</option>
+									<option value="changes"><i>Toggle File Changes</i> command</option>
+								</select>
+							</div>
 						</div>
 					</div>
 				</div>
@@ -273,7 +280,7 @@
 								data-setting-type="object"
 								disabled
 							/>
-							<label for="menus.explorer.remote">Add <i>Open File on Remote</i> command</label>
+							<label for="menus.explorer.remote">Add <i>Open File on Remote *</i> commands</label>
 						</div>
 					</div>
 
@@ -287,7 +294,9 @@
 								data-setting-type="object"
 								disabled
 							/>
-							<label for="menus.explorer.history">Add <i>Open File History</i> command</label>
+							<label for="menus.explorer.history"
+								>Add <i>Open File History</i> and <i>Quick Open File History</i> commands</label
+							>
 						</div>
 					</div>
 
@@ -473,7 +482,7 @@
 								data-setting-type="object"
 								disabled
 							/>
-							<label for="menus.scmItem.remote">Add <i>Open File on Remote</i> command</label>
+							<label for="menus.scmItem.remote">Add <i>Open File on Remote *</i> commands</label>
 						</div>
 					</div>
 
@@ -487,7 +496,9 @@
 								data-setting-type="object"
 								disabled
 							/>
-							<label for="menus.scmItem.history">Add <i>Open File History</i> command</label>
+							<label for="menus.scmItem.history"
+								>Add <i>Open File History</i> and <i>Quick Open File History</i> commands</label
+							>
 						</div>
 					</div>
 

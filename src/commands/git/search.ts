@@ -45,8 +45,8 @@ const searchOperatorToTitleMap = new Map<SearchOperators, string>([
 	['message:', 'Search by Message'],
 	['@:', 'Search by Author'],
 	['author:', 'Search by Author'],
-	['#:', 'Search by Commit ID'],
-	['commit:', 'Search by Commit ID'],
+	['#:', 'Search by Commit SHA'],
+	['commit:', 'Search by Commit SHA'],
 	['?:', 'Search by File'],
 	['file:', 'Search by File'],
 	['~:', 'Search by Changes'],
@@ -160,7 +160,7 @@ export class SearchGitCommand extends QuickCommand<State> {
 			const searchKey = SearchPattern.toKey(search);
 
 			if (context.resultsPromise == null || context.resultsKey !== searchKey) {
-				context.resultsPromise = Container.git.getLogForSearch(state.repo.path, search);
+				context.resultsPromise = state.repo.searchForCommits(search);
 				context.resultsKey = searchKey;
 			}
 

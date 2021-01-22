@@ -1,14 +1,17 @@
 'use strict';
 import { Disposable, TreeItem, TreeItemCollapsibleState, window } from 'vscode';
-import { CommitFileNode } from './commitFileNode';
 import { LoadMoreNode, MessageNode } from './common';
+import { configuration } from '../../configuration';
 import { Container } from '../../container';
 import { FileHistoryTrackerNode } from './fileHistoryTrackerNode';
+import { FileHistoryView } from '../fileHistoryView';
+import { FileRevisionAsCommitNode } from './fileRevisionAsCommitNode';
 import {
 	GitBranch,
 	GitLog,
 	GitRevision,
 	RepositoryChange,
+	RepositoryChangeComparisonMode,
 	RepositoryChangeEvent,
 	RepositoryFileSystemChangeEvent,
 } from '../../git/git';
@@ -17,10 +20,9 @@ import { insertDateMarkers } from './helpers';
 import { Logger } from '../../logger';
 import { RepositoryNode } from './repositoryNode';
 import { debug, gate, Iterables } from '../../system';
-import { View } from '../viewBase';
 import { ContextValues, PageableViewNode, SubscribeableViewNode, ViewNode } from './viewNode';
 
-export class FileHistoryNode extends SubscribeableViewNode implements PageableViewNode {
+export class FileHistoryNode extends SubscribeableViewNode<FileHistoryView> implements PageableViewNode {
 	static key = ':history:file';
 	static getId(repoPath: string, uri: string): string {
 		return `${RepositoryNode.getId(repoPath)}${this.key}(${uri})`;
@@ -28,7 +30,7 @@ export class FileHistoryNode extends SubscribeableViewNode implements PageableVi
 
 	protected splatted = true;
 
-	constructor(uri: GitUri, view: View, parent: ViewNode, private readonly branch: GitBranch | undefined) {
+	constructor(uri: GitUri, view: FileHistoryView, parent: ViewNode, private readonly branch: GitBranch | undefined) {
 		super(uri, view, parent);
 	}
 
@@ -62,14 +64,7 @@ export class FileHistoryNode extends SubscribeableViewNode implements PageableVi
 		if (this.uri.sha == null) {
 			const commits = await status?.toPsuedoCommits();
 			if (commits?.length) {
-				children.push(
-					...commits.map(
-						commit =>
-							new CommitFileNode(this.view, this, status!, commit, {
-								displayAsCommit: true,
-							}),
-					),
-				);
+				children.push(...commits.map(commit => new FileRevisionAsCommitNode(this.view, this, status!, commit)));
 			}
 		}
 
@@ -79,9 +74,8 @@ export class FileHistoryNode extends SubscribeableViewNode implements PageableVi
 					Iterables.map(
 						log.commits.values(),
 						c =>
-							new CommitFileNode(this.view, this, c.files[0], c, {
+							new FileRevisionAsCommitNode(this.view, this, c.files[0], c, {
 								branch: this.branch,
-								displayAsCommit: true,
 								unpublished: unpublishedCommits?.has(c.ref),
 							}),
 					),
@@ -133,6 +127,11 @@ export class FileHistoryNode extends SubscribeableViewNode implements PageableVi
 			repo.onDidChange(this.onRepositoryChanged, this),
 			repo.onDidChangeFileSystem(this.onFileSystemChanged, this),
 			repo.startWatchingFileSystem(),
+			configuration.onDidChange(e => {
+				if (configuration.changed(e, 'advanced', 'fileHistoryFollowsRenames')) {
+					this.view.resetNodeLastKnownLimit(this);
+				}
+			}),
 		);
 
 		return subscription;
@@ -144,15 +143,19 @@ export class FileHistoryNode extends SubscribeableViewNode implements PageableVi
 
 	private onRepositoryChanged(e: RepositoryChangeEvent) {
 		if (
-			!e.changed(RepositoryChange.Index) &&
-			!e.changed(RepositoryChange.Heads) &&
-			!e.changed(RepositoryChange.Remotes) &&
-			!e.changed(RepositoryChange.Unknown)
+			!e.changed(
+				RepositoryChange.Index,
+				RepositoryChange.Heads,
+				RepositoryChange.Remotes,
+				RepositoryChange.Status,
+				RepositoryChange.Unknown,
+				RepositoryChangeComparisonMode.Any,
+			)
 		) {
 			return;
 		}
 
-		Logger.debug(`FileHistoryNode.onRepositoryChanged(${e.changes.join()}); triggering node refresh`);
+		Logger.debug(`FileHistoryNode.onRepositoryChanged(${e.toString()}); triggering node refresh`);
 
 		void this.triggerChange(true);
 	}

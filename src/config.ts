@@ -46,6 +46,10 @@ export interface Config {
 	defaultDateSource: DateSource;
 	defaultDateStyle: DateStyle;
 	defaultGravatarsStyle: GravatarDefaultStyle;
+	defaultTimeFormat: string | null;
+	fileAnnotations: {
+		command: string | null;
+	};
 	gitCommands: {
 		closeOnFocusOut: boolean;
 		search: {
@@ -55,11 +59,13 @@ export interface Config {
 			showResultsInSideBar: boolean | null;
 		};
 		skipConfirmations: string[];
+		sortBy: GitCommandSorting;
 	};
 	heatmap: {
 		ageThreshold: number;
 		coldColor: string;
 		hotColor: string;
+		locations: HeatmapLocations[];
 		toggleMode: AnnotationsToggleMode;
 	};
 	hovers: {
@@ -88,7 +94,9 @@ export interface Config {
 			enabled: boolean;
 		};
 	};
-	insiders: boolean;
+	integrations: {
+		enabled: boolean;
+	};
 	keymap: KeyMap;
 	liveshare: {
 		allowGuestAccess: boolean;
@@ -104,6 +112,7 @@ export interface Config {
 	modes: Record<string, ModeConfig>;
 	outputLevel: TraceLevel;
 	remotes: RemotesConfig[] | null;
+	showWelcomeOnInstall: boolean;
 	showWhatsNewAfterUpgrades: boolean;
 	sortBranchesBy: BranchSorting;
 	sortTagsBy: TagSorting;
@@ -126,6 +135,9 @@ export interface Config {
 				authorsOnly: string;
 			};
 		};
+	};
+	terminalLinks: {
+		enabled: boolean;
 	};
 	views: ViewsConfig;
 	advanced: AdvancedConfig;
@@ -203,6 +215,11 @@ export enum FileAnnotationType {
 	Heatmap = 'heatmap',
 }
 
+export enum GitCommandSorting {
+	Name = 'name',
+	Usage = 'usage',
+}
+
 export enum GravatarDefaultStyle {
 	Faces = 'wavatar',
 	Geometric = 'identicon',
@@ -210,6 +227,11 @@ export enum GravatarDefaultStyle {
 	MysteryPerson = 'mp',
 	Retro = 'retro',
 	Robot = 'robohash',
+}
+
+export enum HeatmapLocations {
+	Gutter = 'gutter',
+	Overview = 'overview',
 }
 
 export enum KeyMap {
@@ -256,6 +278,7 @@ export enum ViewShowBranchComparison {
 
 export interface AdvancedConfig {
 	abbreviatedShaLength: number;
+	abbreviateShaOnCopy: boolean;
 	blame: {
 		customArguments: string[] | null;
 		delayAfterEdit: number;
@@ -276,6 +299,7 @@ export interface AdvancedConfig {
 		suppressGitVersionWarning: boolean;
 		suppressLineUncommittedWarning: boolean;
 		suppressNoRepositoryWarning: boolean;
+		suppressRebaseSwitchToTextWarning: boolean;
 	};
 	quickPick: {
 		closeOnFocusOut: boolean;
@@ -466,7 +490,7 @@ export interface BranchesViewConfig {
 		showForBranches: boolean;
 		showForCommits: boolean;
 	};
-	showBranchComparison: false | ViewShowBranchComparison;
+	showBranchComparison: false | ViewShowBranchComparison.Branch;
 }
 
 export interface CommitsViewConfig {
@@ -518,6 +542,7 @@ export interface RepositoriesViewConfig {
 	avatars: boolean;
 	branches: {
 		layout: ViewBranchesLayout;
+		showBranchComparison: false | ViewShowBranchComparison.Branch;
 	};
 	compact: boolean;
 	enabled: boolean;
@@ -529,6 +554,14 @@ export interface RepositoriesViewConfig {
 		showForCommits: boolean;
 	};
 	showBranchComparison: false | ViewShowBranchComparison;
+	showBranches: boolean;
+	showCommits: boolean;
+	showContributors: boolean;
+	showIncomingActivity: boolean;
+	showRemotes: boolean;
+	showStashes: boolean;
+	showTags: boolean;
+	showUpstreamStatus: boolean;
 }
 
 export interface SearchAndCompareViewConfig {

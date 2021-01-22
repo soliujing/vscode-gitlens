@@ -1,9 +1,11 @@
 'use strict';
+import { OpenPullRequestActionContext } from '../../api/gitlens';
 import { getPresenceDataUri } from '../../avatars';
 import {
 	Commands,
 	ConnectRemoteProviderCommand,
 	DiffWithCommand,
+	getMarkdownActionCommand,
 	InviteToLiveShareCommand,
 	OpenCommitOnRemoteCommand,
 	OpenFileAtRevisionCommand,
@@ -32,6 +34,7 @@ const emptyStr = '';
 
 export interface CommitFormatOptions extends FormatOptions {
 	autolinkedIssuesOrPullRequests?: Map<string, IssueOrPullRequest | Promises.CancellationError | undefined>;
+	avatarSize?: number;
 	dateStyle?: DateStyle;
 	footnotes?: Map<number, string>;
 	getBranchAndTagTips?: (sha: string) => string | undefined;
@@ -209,7 +212,7 @@ export class CommitFormatter extends Formatter<GitCommit, CommitFormatOptions> {
 				presence.status === 'dnd' ? 'in ' : emptyStr
 			}${presence.statusText.toLocaleLowerCase()}`;
 
-			const avatarMarkdownPromise = this._getAvatarMarkdown(title);
+			const avatarMarkdownPromise = this._getAvatarMarkdown(title, this._options.avatarSize);
 			return avatarMarkdownPromise.then(md =>
 				this._padOrTruncate(
 					`${md}${this._getPresenceMarkdown(presence, title)}`,
@@ -218,11 +221,11 @@ export class CommitFormatter extends Formatter<GitCommit, CommitFormatOptions> {
 			);
 		}
 
-		return this._getAvatarMarkdown(this._item.author);
+		return this._getAvatarMarkdown(this._item.author, this._options.avatarSize);
 	}
 
-	private async _getAvatarMarkdown(title: string) {
-		const size = Container.config.hovers.avatarSize;
+	private async _getAvatarMarkdown(title: string, size?: number) {
+		size = size ?? Container.config.hovers.avatarSize;
 		const avatarPromise = this._item.getAvatarUri({
 			defaultStyle: Container.config.defaultGravatarsStyle,
 			size: size,
@@ -302,12 +305,26 @@ export class CommitFormatter extends Formatter<GitCommit, CommitFormatOptions> {
 		const { pullRequestOrRemote: pr } = this._options;
 		if (pr != null) {
 			if (PullRequest.is(pr)) {
-				commands += `[$(git-pull-request) PR #${pr.id}](${pr.url} "Open Pull Request \\#${pr.id} on ${
-					pr.provider
-				}\n${GlyphChars.Dash.repeat(2)}\n${pr.title}\n${pr.state}, ${pr.formatDateFromNow()}")${separator}`;
+				commands += `[$(git-pull-request) PR #${
+					pr.id
+				}](${getMarkdownActionCommand<OpenPullRequestActionContext>('openPullRequest', {
+					repoPath: this._item.repoPath,
+					provider: { id: pr.provider.id, name: pr.provider.name, domain: pr.provider.domain },
+					pullRequest: {
+						id: pr.id,
+						url: pr.url,
+
+						provider: { id: pr.provider.id, name: pr.provider.name, domain: pr.provider.domain },
+						repoPath: this._item.repoPath,
+					},
+				})} "Open Pull Request \\#${pr.id}${
+					Container.actionRunners.count('openPullRequest') == 1 ? ` on ${pr.provider.name}` : ''
+				}\n${GlyphChars.Dash.repeat(2)}\n${Strings.escapeMarkdown(pr.title).replace(/"/g, '\\"')}\n${
+					pr.state
+				}, ${pr.formatDateFromNow()}")${separator}`;
 			} else if (pr instanceof Promises.CancellationError) {
-				commands += `[$(git-pull-request) PR (${GlyphChars.Ellipsis})](command:${Commands.RefreshHover} "Searching for a Pull Request (if any) that introduced this commit...")${separator}`;
-			} else if (pr.provider != null) {
+				commands += `[$(git-pull-request) PR $(sync~spin)](command:${Commands.RefreshHover} "Searching for a Pull Request (if any) that introduced this commit...")${separator}`;
+			} else if (pr.provider != null && Container.config.integrations.enabled) {
 				commands += `[$(plug) Connect to ${pr.provider.name}${
 					GlyphChars.Ellipsis
 				}](${ConnectRemoteProviderCommand.getMarkdownCommandArgs(pr)} "Connect to ${
@@ -411,12 +428,15 @@ export class CommitFormatter extends Formatter<GitCommit, CommitFormatOptions> {
 
 	get message(): string {
 		if (this._item.isUncommitted) {
+			const confliced = this._item.hasConflicts;
 			const staged =
 				this._item.isUncommittedStaged ||
 				(this._options.previousLineDiffUris?.current?.isUncommittedStaged ?? false);
 
 			return this._padOrTruncate(
-				`${this._options.markdown ? '\n> ' : ''}${staged ? 'Staged' : 'Uncommitted'} changes`,
+				`${this._options.markdown ? '\n> ' : ''}${
+					confliced ? 'Merge' : staged ? 'Staged' : 'Uncommitted'
+				} changes`,
 				this._options.tokenOptions.message,
 			);
 		}
@@ -456,9 +476,21 @@ export class CommitFormatter extends Formatter<GitCommit, CommitFormatOptions> {
 		let text;
 		if (PullRequest.is(pr)) {
 			if (this._options.markdown) {
-				text = `[PR #${pr.id}](${pr.url} "Open Pull Request \\#${pr.id} on ${
-					pr.provider
-				}\n${GlyphChars.Dash.repeat(2)}\n${pr.title}\n${pr.state}, ${pr.formatDateFromNow()}")`;
+				text = `[PR #${pr.id}](${getMarkdownActionCommand<OpenPullRequestActionContext>('openPullRequest', {
+					repoPath: this._item.repoPath,
+					provider: { id: pr.provider.id, name: pr.provider.name, domain: pr.provider.domain },
+					pullRequest: {
+						id: pr.id,
+						url: pr.url,
+
+						repoPath: this._item.repoPath,
+						provider: { id: pr.provider.id, name: pr.provider.name, domain: pr.provider.domain },
+					},
+				})} "Open Pull Request \\#${pr.id}${
+					Container.actionRunners.count('openPullRequest') == 1 ? ` on ${pr.provider.name}` : ''
+				}\n${GlyphChars.Dash.repeat(2)}\n${Strings.escapeMarkdown(pr.title).replace(/"/g, '\\"')}\n${
+					pr.state
+				}, ${pr.formatDateFromNow()}")`;
 			} else if (this._options.footnotes != null) {
 				const index = this._options.footnotes.size + 1;
 				this._options.footnotes.set(
@@ -472,7 +504,7 @@ export class CommitFormatter extends Formatter<GitCommit, CommitFormatOptions> {
 			}
 		} else if (pr instanceof Promises.CancellationError) {
 			text = this._options.markdown
-				? `[PR ${GlyphChars.Ellipsis}](command:${Commands.RefreshHover} "Searching for a Pull Request (if any) that introduced this commit...")`
+				? `[PR $(sync~spin)](command:${Commands.RefreshHover} "Searching for a Pull Request (if any) that introduced this commit...")`
 				: `PR ${GlyphChars.Ellipsis}`;
 		} else {
 			return this._padOrTruncate(emptyStr, this._options.tokenOptions.pullRequest);

@@ -4,20 +4,19 @@ import { Command, ThemeColor, ThemeIcon, TreeItem, TreeItemCollapsibleState } fr
 import { Commands, DiffWithPreviousCommandArgs } from '../../commands';
 import { CommitFileNode } from './commitFileNode';
 import { ViewFilesLayout } from '../../configuration';
-import { GlyphChars } from '../../constants';
+import { Colors, GlyphChars } from '../../constants';
 import { Container } from '../../container';
 import { FileNode, FolderNode } from './folderNode';
 import { CommitFormatter, GitBranch, GitLogCommit, GitRevisionReference } from '../../git/git';
 import { PullRequestNode } from './pullRequestNode';
-import { StashesView } from '../stashesView';
 import { Arrays, Strings } from '../../system';
-import { ViewsWithFiles } from '../viewBase';
-import { ContextValues, ViewNode, ViewRefNode } from './viewNode';
 import { TagsView } from '../tagsView';
+import { ViewsWithCommits } from '../viewBase';
+import { ContextValues, ViewNode, ViewRefNode } from './viewNode';
 
-export class CommitNode extends ViewRefNode<ViewsWithFiles, GitRevisionReference> {
+export class CommitNode extends ViewRefNode<ViewsWithCommits, GitRevisionReference> {
 	constructor(
-		view: ViewsWithFiles,
+		view: ViewsWithCommits,
 		parent: ViewNode,
 		public readonly commit: GitLogCommit,
 		private readonly unpublished?: boolean,
@@ -36,6 +35,10 @@ export class CommitNode extends ViewRefNode<ViewsWithFiles, GitRevisionReference
 		}
 
 		return `${this.commit.shortSha}: ${message}`;
+	}
+
+	get isTip(): boolean {
+		return (this.branch?.current && this.branch.sha === this.commit.ref) ?? false;
 	}
 
 	get ref(): GitRevisionReference {
@@ -86,7 +89,7 @@ export class CommitNode extends ViewRefNode<ViewsWithFiles, GitRevisionReference
 			);
 		}
 
-		if (!(this.view instanceof StashesView) && !(this.view instanceof TagsView)) {
+		if (!(this.view instanceof TagsView)) {
 			if (this.view.config.pullRequests.enabled && this.view.config.pullRequests.showForCommits) {
 				const pr = await commit.getAssociatedPullRequest();
 				if (pr != null) {
@@ -111,7 +114,7 @@ export class CommitNode extends ViewRefNode<ViewsWithFiles, GitRevisionReference
 		);
 
 		item.contextValue = `${ContextValues.Commit}${this.branch?.current ? '+current' : ''}${
-			this.branch?.current && this.branch.sha === this.commit.ref ? '+HEAD' : ''
+			this.isTip ? '+HEAD' : ''
 		}${this.unpublished ? '+unpublished' : ''}`;
 
 		item.description = CommitFormatter.fromTemplate(this.view.config.formats.commits.description, this.commit, {
@@ -119,8 +122,8 @@ export class CommitNode extends ViewRefNode<ViewsWithFiles, GitRevisionReference
 			messageTruncateAtNewLine: true,
 		});
 		item.iconPath = this.unpublished
-			? new ThemeIcon('arrow-up', new ThemeColor('gitlens.viewCommitToPushIconColor'))
-			: !(this.view instanceof StashesView) && this.view.config.avatars
+			? new ThemeIcon('arrow-up', new ThemeColor(Colors.UnpublishedCommitIconColor))
+			: this.view.config.avatars
 			? await this.commit.getAvatarUri({ defaultStyle: Container.config.defaultGravatarsStyle })
 			: new ThemeIcon('git-commit');
 		item.tooltip = this.tooltip;

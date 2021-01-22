@@ -7,6 +7,7 @@ import {
 	Disposable,
 	Event,
 	EventEmitter,
+	MarkdownString,
 	MessageItem,
 	TreeDataProvider,
 	TreeItem,
@@ -50,23 +51,22 @@ import { TagsView } from './tagsView';
 
 export type View =
 	| BranchesView
+	| CommitsView
 	| ContributorsView
 	| FileHistoryView
-	| CommitsView
 	| LineHistoryView
 	| RemotesView
 	| RepositoriesView
 	| SearchAndCompareView
 	| StashesView
 	| TagsView;
-export type ViewsWithFiles =
+export type ViewsWithCommits =
 	| BranchesView
-	| ContributorsView
 	| CommitsView
+	| ContributorsView
 	| RemotesView
 	| RepositoriesView
 	| SearchAndCompareView
-	| StashesView
 	| TagsView;
 
 export interface TreeViewNodeCollapsibleStateChangeEvent<T> extends TreeViewExpansionEvent<T> {
@@ -115,15 +115,25 @@ export abstract class ViewBase<
 				const item = await getTreeItem.apply(this, [node]);
 
 				const parent = node.getParent();
-				if (parent != null) {
-					item.tooltip = `${
-						item.tooltip ?? item.label
-					}\n\nDBG:\nnode: ${node.toString()}\nparent: ${parent.toString()}\ncontext: ${item.contextValue}`;
-				} else {
-					item.tooltip = `${item.tooltip ?? item.label}\n\nDBG:\nnode: ${node.toString()}\ncontext: ${
-						item.contextValue
-					}`;
+
+				if (item.tooltip == null) {
+					item.tooltip = new MarkdownString(
+						item.label != null && typeof item.label !== 'string' ? item.label.label : item.label ?? '',
+					);
 				}
+
+				if (typeof item.tooltip === 'string') {
+					item.tooltip = `${item.tooltip}\n\n---\ncontext: ${item.contextValue}\nnode: ${node.toString()}${
+						parent != null ? `\nparent: ${parent.toString()}` : ''
+					}`;
+				} else {
+					item.tooltip.appendMarkdown(
+						`\n\n---\n\ncontext: \`${item.contextValue}\`\\\nnode: \`${node.toString()}\`${
+							parent != null ? `\\\nparent: \`${parent.toString()}\`` : ''
+						}`,
+					);
+				}
+
 				return item;
 			};
 		}

@@ -114,7 +114,9 @@ export function escapeMarkdown(s: string, options: { quoted?: boolean } = {}): s
 	return s.replace(markdownQuotedRegex, '\t\n>  ');
 }
 
-export function equalsIgnoreCase(a: string, b: string): boolean {
+export function equalsIgnoreCase(a: string | null | undefined, b: string | null | undefined): boolean {
+	if (a == null && b == null) return true;
+	if (a == null || b == null) return false;
 	return a.localeCompare(b, undefined, { sensitivity: 'accent' }) === 0;
 }
 
@@ -347,13 +349,13 @@ export function padRightOrTruncate(s: string, max: number, padding?: string, wid
 export function pluralize(
 	s: string,
 	count: number,
-	options?: { number?: string; plural?: string; suffix?: string; zero?: string },
+	options?: { infix?: string; number?: string; plural?: string; suffix?: string; zero?: string },
 ) {
 	if (options == null) return `${count} ${s}${count === 1 ? emptyStr : 's'}`;
 
 	return `${
 		count === 0 ? (options.zero != null ? options.zero : count) : options.number != null ? options.number : count
-	} ${count === 1 ? s : options.plural ?? `${s}${options.suffix ?? 's'}`}`;
+	}${options.infix ?? ' '}${count === 1 ? s : options.plural ?? `${s}${options.suffix ?? 's'}`}`;
 }
 
 // Removes \ / : * ? " < > | and C0 and C1 control codes

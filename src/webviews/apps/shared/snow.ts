@@ -38,56 +38,62 @@ class Snowflake {
 }
 
 export class Snow {
-	snowing = false;
-
-	private readonly _canvas: any;
-	private readonly _ctx: any;
+	private readonly _canvas: HTMLCanvasElement | undefined;
+	private readonly _ctx: CanvasRenderingContext2D | undefined;
 	private _height: number = 0;
 	private _width: number = 0;
 	private readonly _snowflakes: Snowflake[] = [];
 
-	private readonly _clearBound: any;
-	private readonly _updateBound: any;
+	private readonly _clearBound: () => void;
+	private readonly _updateBound: () => void;
 
-	constructor() {
+	constructor(public snowing: boolean = true) {
 		this._clearBound = this.clear.bind(this);
 		this._updateBound = this.update.bind(this);
 
-		this._canvas = document.querySelector('canvas.snow');
-		this._ctx = this._canvas.getContext('2d');
+		this._canvas = document.querySelector<HTMLCanvasElement>('canvas.snow') ?? undefined;
+		this._ctx = this._canvas?.getContext('2d') ?? undefined;
+
+		if (this._ctx == null) return;
 
 		const trigger = document.querySelector('.snow__trigger');
 		if (trigger != null) {
-			trigger.addEventListener('click', () => this.onToggle());
+			trigger.addEventListener('click', () => this.onToggle(!this.snowing));
 		}
 
 		window.addEventListener('resize', () => this.onResize());
 		this.onResize();
 
-		this.onToggle();
+		this.onToggle(snowing);
 	}
 
-	onToggle() {
-		this.snowing = !this.snowing;
+	onToggle(snowing: boolean): void {
+		this.snowing = snowing;
+		document.body.classList.toggle('snowing', this.snowing);
+
 		if (this.snowing) {
 			this.createSnowflakes();
 			requestAnimationFrame(this._updateBound);
 		}
 	}
 
-	onResize() {
+	onResize(): void {
+		if (this._canvas == null) return;
+
 		this._height = window.innerHeight;
 		this._width = window.innerWidth;
 		this._canvas.width = this._width;
 		this._canvas.height = this._height;
 	}
 
-	clear() {
+	clear(): void {
+		if (this._canvas == null || this._ctx == null) return;
+
 		this._ctx.clearRect(0, 0, this._canvas.width, this._canvas.height);
 		this._snowflakes.length = 0;
 	}
 
-	createSnowflakes() {
+	createSnowflakes(): void {
 		const flakes = window.innerWidth / 4;
 
 		for (let i = 0; i < flakes; i++) {
@@ -95,7 +101,9 @@ export class Snow {
 		}
 	}
 
-	update() {
+	update(): void {
+		if (this._ctx == null) return;
+
 		this._ctx.clearRect(0, 0, this._width, this._height);
 
 		const color = document.body.classList.contains('vscode-light') ? '#424242' : '#fff';

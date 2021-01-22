@@ -1,7 +1,7 @@
 'use strict';
 import { GitBranch } from './branch';
-import { Container } from '../../container';
 import { GlyphChars } from '../../constants';
+import { Container } from '../../container';
 
 const emptyStr = '';
 
@@ -206,6 +206,22 @@ export namespace GitReference {
 		}
 	}
 
+	export function fromBranch(branch: GitBranchReference) {
+		return create(branch.ref, branch.repoPath, {
+			refType: branch.refType,
+			name: branch.name,
+			remote: branch.remote,
+			tracking: branch.tracking,
+		});
+	}
+
+	export function fromTag(tag: GitTagReference) {
+		return create(tag.ref, tag.repoPath, {
+			refType: tag.refType,
+			name: tag.name,
+		});
+	}
+
 	export function getNameWithoutRemote(ref: GitReference) {
 		if (ref.refType === 'branch') {
 			return ref.remote ? GitBranch.getNameWithoutRemote(ref.name) : ref.name;
@@ -250,12 +266,12 @@ export namespace GitReference {
 			switch (ref.refType) {
 				case 'branch':
 					result = `${options.label ? `${ref.remote ? 'remote ' : ''}branch ` : ''}${
-						options.icon ? `$(git-branch) ${ref.name}${GlyphChars.Space}` : ref.name
+						options.icon ? `$(git-branch)${GlyphChars.Space}${ref.name}${GlyphChars.Space}` : ref.name
 					}`;
 					break;
 				case 'tag':
 					result = `${options.label ? 'tag ' : ''}${
-						options.icon ? `$(tag) ${ref.name}${GlyphChars.Space}` : ref.name
+						options.icon ? `$(tag)${GlyphChars.Space}${ref.name}${GlyphChars.Space}` : ref.name
 					}`;
 					break;
 				default: {
@@ -271,7 +287,7 @@ export namespace GitReference {
 
 						result = `${options.label ? 'stash ' : ''}${
 							options.icon
-								? `$(archive) ${message ?? ref.name}${GlyphChars.Space}`
+								? `$(archive)${GlyphChars.Space}${message ?? ref.name}${GlyphChars.Space}`
 								: `${message ?? ref.number ?? ref.name}`
 						}`;
 					} else if (GitRevision.isRange(ref.ref)) {
@@ -297,7 +313,7 @@ export namespace GitReference {
 
 						result = `${options.label ? `${prefix}commit ` : ''}${
 							options.icon
-								? `$(git-commit) ${name}${message ?? ''}${GlyphChars.Space}`
+								? `$(git-commit)${GlyphChars.Space}${name}${message ?? ''}${GlyphChars.Space}`
 								: `${name}${message ?? ''}`
 						}`;
 					}
@@ -333,10 +349,13 @@ export * from './file';
 export * from './issue';
 export * from './log';
 export * from './logCommit';
+export * from './merge';
 export * from './pullRequest';
-export * from './remote';
-export * from './repository';
+export * from './rebase';
 export * from './reflog';
+export * from './remote';
+export * from './remoteProvider';
+export * from './repository';
 export * from './shortlog';
 export * from './stash';
 export * from './stashCommit';

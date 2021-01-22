@@ -1,12 +1,6 @@
 'use strict';
 import { commands, ConfigurationChangeEvent, TreeItem, TreeItemCollapsibleState } from 'vscode';
-import {
-	BranchSorting,
-	configuration,
-	SearchAndCompareViewConfig,
-	TagSorting,
-	ViewFilesLayout,
-} from '../configuration';
+import { configuration, SearchAndCompareViewConfig, ViewFilesLayout } from '../configuration';
 import { ContextKeys, NamedRef, PinnedItem, PinnedItems, setContext, WorkspaceState } from '../constants';
 import { Container } from '../container';
 import { GitLog, GitRevision, SearchPattern } from '../git/git';
@@ -52,11 +46,7 @@ export class SearchAndCompareViewNode extends ViewNode<SearchAndCompareView> {
 	}
 
 	getChildren(): ViewNode[] {
-		if (this.children.length === 0) {
-			this.view.message = 'No search or comparison results could be found.';
-
-			return [];
-		}
+		if (this.children.length === 0) return [];
 
 		this.view.message = undefined;
 
@@ -158,10 +148,7 @@ export class SearchAndCompareViewNode extends ViewNode<SearchAndCompareView> {
 						ReferencesQuickPickIncludes.BranchesAndTags |
 						ReferencesQuickPickIncludes.HEAD |
 						ReferencesQuickPickIncludes.WorkingTree,
-					sort: {
-						branches: { current: true, orderBy: BranchSorting.DateDesc },
-						tags: { orderBy: TagSorting.DateDesc },
-					},
+					sort: { branches: { current: true } },
 				},
 			);
 			if (pick == null) {
@@ -198,10 +185,7 @@ export class SearchAndCompareViewNode extends ViewNode<SearchAndCompareView> {
 					ReferencesQuickPickIncludes.BranchesAndTags |
 					ReferencesQuickPickIncludes.HEAD |
 					ReferencesQuickPickIncludes.WorkingTree,
-				sort: {
-					branches: { current: true, orderBy: BranchSorting.DateDesc },
-					tags: { orderBy: TagSorting.DateDesc },
-				},
+				sort: { branches: { current: true }, tags: {} },
 			});
 			if (pick == null) {
 				await this.triggerChange();
@@ -320,9 +304,11 @@ export class SearchAndCompareView extends ViewBase<SearchAndCompareViewNode, Sea
 		if (
 			!changed &&
 			!configuration.changed(e, 'defaultDateFormat') &&
+			!configuration.changed(e, 'defaultDateShortFormat') &&
 			!configuration.changed(e, 'defaultDateSource') &&
 			!configuration.changed(e, 'defaultDateStyle') &&
-			!configuration.changed(e, 'defaultGravatarsStyle')
+			!configuration.changed(e, 'defaultGravatarsStyle') &&
+			!configuration.changed(e, 'defaultTimeFormat')
 		) {
 			return false;
 		}

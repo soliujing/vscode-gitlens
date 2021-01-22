@@ -26,10 +26,14 @@ export class RemotesNode extends ViewNode<RemotesView | RepositoriesView> {
 		return RemotesNode.getId(this.repo.path);
 	}
 
+	get repoPath(): string {
+		return this.repo.path;
+	}
+
 	async getChildren(): Promise<ViewNode[]> {
 		if (this._children == null) {
 			const remotes = await this.repo.getRemotes({ sort: true });
-			if (remotes == null || remotes.length === 0) {
+			if (remotes.length === 0) {
 				return [new MessageNode(this.view, this, 'No remotes could be found')];
 			}
 

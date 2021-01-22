@@ -16,6 +16,7 @@ import {
 	window,
 	workspace,
 } from 'vscode';
+import { Action, ActionContext } from '../api/gitlens';
 import { BuiltInCommands, DocumentSchemes, ImageMimetypes } from '../constants';
 import { Container } from '../container';
 import { GitBranch, GitCommit, GitContributor, GitFile, GitRemote, GitTag, Repository } from '../git/git';
@@ -25,9 +26,12 @@ import { CommandQuickPickItem, RepositoryPicker } from '../quickpicks';
 import { ViewNode, ViewRefNode } from '../views/nodes';
 
 export enum Commands {
+	ActionPrefix = 'gitlens.action.',
 	AddAuthors = 'gitlens.addAuthors',
 	BrowseRepoAtRevision = 'gitlens.browseRepoAtRevision',
 	BrowseRepoAtRevisionInNewWindow = 'gitlens.browseRepoAtRevisionInNewWindow',
+	BrowseRepoBeforeRevision = 'gitlens.browseRepoBeforeRevision',
+	BrowseRepoBeforeRevisionInNewWindow = 'gitlens.browseRepoBeforeRevisionInNewWindow',
 	ClearFileAnnotations = 'gitlens.clearFileAnnotations',
 	CloseUnchangedFiles = 'gitlens.closeUnchangedFiles',
 	CloseUpdatesView = 'gitlens.closeUpdatesView',
@@ -37,12 +41,14 @@ export enum Commands {
 	CompareWorkingWith = 'gitlens.compareWorkingWith',
 	ComputingFileAnnotations = 'gitlens.computingFileAnnotations',
 	ConnectRemoteProvider = 'gitlens.connectRemoteProvider',
+	CopyCurrentBranch = 'gitlens.copyCurrentBranch',
 	CopyMessageToClipboard = 'gitlens.copyMessageToClipboard',
 	CopyRemoteBranchesUrl = 'gitlens.copyRemoteBranchesUrl',
 	CopyRemoteBranchUrl = 'gitlens.copyRemoteBranchUrl',
 	CopyRemoteCommitUrl = 'gitlens.copyRemoteCommitUrl',
 	CopyRemoteComparisonUrl = 'gitlens.copyRemoteComparisonUrl',
 	CopyRemoteFileUrl = 'gitlens.copyRemoteFileUrlToClipboard',
+	CopyRemoteFileUrlFrom = 'gitlens.copyRemoteFileUrlFrom',
 	CopyRemotePullRequestUrl = 'gitlens.copyRemotePullRequestUrl',
 	CopyRemoteRepositoryUrl = 'gitlens.copyRemoteRepositoryUrl',
 	CopyShaToClipboard = 'gitlens.copyShaToClipboard',
@@ -68,6 +74,8 @@ export enum Commands {
 	ExternalDiff = 'gitlens.externalDiff',
 	ExternalDiffAll = 'gitlens.externalDiffAll',
 	FetchRepositories = 'gitlens.fetchRepositories',
+	HideLineHistoryView = 'gitlens.hideLineHistoryView',
+	HideRepositoriesView = 'gitlens.hideRepositoriesView',
 	InviteToLiveShare = 'gitlens.inviteToLiveShare',
 	OpenChangedFiles = 'gitlens.openChangedFiles',
 	OpenBranchesOnRemote = 'gitlens.openBranchesOnRemote',
@@ -76,6 +84,7 @@ export enum Commands {
 	OpenComparisonOnRemote = 'gitlens.openComparisonOnRemote',
 	OpenFileFromRemote = 'gitlens.openFileFromRemote',
 	OpenFileOnRemote = 'gitlens.openFileOnRemote',
+	OpenFileOnRemoteFrom = 'gitlens.openFileOnRemoteFrom',
 	OpenFileAtRevision = 'gitlens.openFileRevision',
 	OpenFileAtRevisionFrom = 'gitlens.openFileRevisionFrom',
 	OpenOnRemote = 'gitlens.openOnRemote',
@@ -91,7 +100,9 @@ export enum Commands {
 	PullRepositories = 'gitlens.pullRepositories',
 	PushRepositories = 'gitlens.pushRepositories',
 	GitCommands = 'gitlens.gitCommands',
+	QuickOpenFileHistory = 'gitlens.quickOpenFileHistory',
 	RefreshHover = 'gitlens.refreshHover',
+	ResetRemoteConnectionAuthorization = 'gitlens.resetRemoteConnectionAuthorization',
 	ResetSuppressedWarnings = 'gitlens.resetSuppressedWarnings',
 	RevealCommitInView = 'gitlens.revealCommitInView',
 	SearchCommits = 'gitlens.showCommitSearch',
@@ -162,6 +173,17 @@ export enum Commands {
 	Deprecated_OpenFileInRemote = 'gitlens.openFileInRemote',
 	Deprecated_OpenInRemote = 'gitlens.openInRemote',
 	Deprecated_OpenRepoInRemote = 'gitlens.openRepoInRemote',
+}
+
+export function executeActionCommand<T extends ActionContext>(action: Action<T>, args: Omit<T, 'type'>) {
+	return commands.executeCommand(`${Commands.ActionPrefix}${action}`, { ...args, type: action });
+}
+
+export function getMarkdownActionCommand<T extends ActionContext>(action: Action<T>, args: Omit<T, 'type'>): string {
+	return Command.getMarkdownCommandArgsCore(`${Commands.ActionPrefix}${action}` as Commands, {
+		...args,
+		type: action,
+	});
 }
 
 export function executeCommand<T>(command: Commands, args: T) {

@@ -1,7 +1,6 @@
 'use strict';
 import { Selection, TreeItem, TreeItemCollapsibleState, window } from 'vscode';
 import { UriComparer } from '../../comparers';
-import { BranchSorting, TagSorting } from '../../configuration';
 import { Container } from '../../container';
 import { FileHistoryView } from '../fileHistoryView';
 import { GitReference, GitRevision } from '../../git/git';
@@ -15,14 +14,14 @@ import { LinesChangeEvent } from '../../trackers/gitLineTracker';
 import { ContextValues, SubscribeableViewNode, unknownGitUri, ViewNode } from './viewNode';
 import { ContextKeys, setContext } from '../../constants';
 
-export class LineHistoryTrackerNode extends SubscribeableViewNode<LineHistoryView | FileHistoryView> {
+export class LineHistoryTrackerNode extends SubscribeableViewNode<FileHistoryView | LineHistoryView> {
 	private _base: string | undefined;
 	private _child: LineHistoryNode | undefined;
 	private _editorContents: string | undefined;
 	private _selection: Selection | undefined;
 	protected splatted = true;
 
-	constructor(view: LineHistoryView | FileHistoryView) {
+	constructor(view: FileHistoryView | LineHistoryView) {
 		super(unknownGitUri, view);
 	}
 
@@ -102,10 +101,7 @@ export class LineHistoryTrackerNode extends SubscribeableViewNode<LineHistoryVie
 				allowEnteringRefs: true,
 				picked: this._base,
 				// checkmarks: true,
-				sort: {
-					branches: { current: true, orderBy: BranchSorting.DateDesc },
-					tags: { orderBy: TagSorting.DateDesc },
-				},
+				sort: { branches: { current: true }, tags: {} },
 			},
 		);
 		if (pick == null) return;

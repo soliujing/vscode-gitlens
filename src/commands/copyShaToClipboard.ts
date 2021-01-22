@@ -1,10 +1,5 @@
 'use strict';
-import { env, TextEditor, Uri, window } from 'vscode';
-import { Container } from '../container';
-import { GitUri } from '../git/gitUri';
-import { Logger } from '../logger';
-import { Messages } from '../messages';
-import { Iterables } from '../system';
+import { env, TextEditor, Uri } from 'vscode';
 import {
 	ActiveEditorCommand,
 	command,
@@ -15,6 +10,11 @@ import {
 	isCommandContextViewNodeHasCommit,
 	isCommandContextViewNodeHasTag,
 } from './common';
+import { Container } from '../container';
+import { GitUri } from '../git/gitUri';
+import { Logger } from '../logger';
+import { Messages } from '../messages';
+import { Iterables } from '../system';
 
 export interface CopyShaToClipboardCommandArgs {
 	sha?: string;
@@ -29,7 +29,9 @@ export class CopyShaToClipboardCommand extends ActiveEditorCommand {
 	protected preExecute(context: CommandContext, args?: CopyShaToClipboardCommandArgs) {
 		if (isCommandContextViewNodeHasCommit(context)) {
 			args = { ...args };
-			args.sha = context.node.commit.sha;
+			args.sha = Container.config.advanced.abbreviateShaOnCopy
+				? context.node.commit.shortSha
+				: context.node.commit.sha;
 			return this.execute(context.editor, context.node.commit.uri, args);
 		} else if (isCommandContextViewNodeHasBranch(context)) {
 			args = { ...args };
@@ -72,7 +74,7 @@ export class CopyShaToClipboardCommand extends ActiveEditorCommand {
 					args.sha = blame.commit.sha;
 				} catch (ex) {
 					Logger.error(ex, 'CopyShaToClipboardCommand', `getBlameForLine(${blameline})`);
-					void Messages.showGenericErrorMessage('Unable to copy commit id');
+					void Messages.showGenericErrorMessage('Unable to copy commit SHA');
 
 					return;
 				}
@@ -80,17 +82,8 @@ export class CopyShaToClipboardCommand extends ActiveEditorCommand {
 
 			void (await env.clipboard.writeText(args.sha));
 		} catch (ex) {
-			const msg: string = ex?.message ?? '';
-			if (msg.includes("Couldn't find the required `xsel` binary")) {
-				void window.showErrorMessage(
-					'Unable to copy commit id, xsel is not installed. Please install it via your package manager, e.g. `sudo apt install xsel`',
-				);
-
-				return;
-			}
-
 			Logger.error(ex, 'CopyShaToClipboardCommand');
-			void Messages.showGenericErrorMessage('Unable to copy commit id');
+			void Messages.showGenericErrorMessage('Unable to copy commit SHA');
 		}
 	}
 }

@@ -1,9 +1,19 @@
 'use strict';
 import { Command, Disposable, Event, TreeItem, TreeItemCollapsibleState, TreeViewVisibilityChangeEvent } from 'vscode';
-import { GitFile, GitReference, GitRevisionReference } from '../../git/git';
+import { GlyphChars } from '../../constants';
+import { Container } from '../../container';
+import {
+	GitFile,
+	GitReference,
+	GitRevisionReference,
+	Repository,
+	RepositoryChange,
+	RepositoryChangeComparisonMode,
+	RepositoryChangeEvent,
+} from '../../git/git';
 import { GitUri } from '../../git/gitUri';
 import { Logger } from '../../logger';
-import { debug, Functions, gate, logName } from '../../system';
+import { debug, Functions, gate, log, logName, Strings } from '../../system';
 import { TreeViewNodeCollapsibleStateChangeEvent, View } from '../viewBase';
 
 export enum ContextValues {
@@ -13,6 +23,8 @@ export enum ContextValues {
 	Branches = 'gitlens:branches',
 	BranchStatusAheadOfUpstream = 'gitlens:status-branch:upstream:ahead',
 	BranchStatusBehindUpstream = 'gitlens:status-branch:upstream:behind',
+	BranchStatusNoUpstream = 'gitlens:status-branch:upstream:none',
+	BranchStatusSameAsUpstream = 'gitlens:status-branch:upstream:same',
 	BranchStatusFiles = 'gitlens:status-branch:files',
 	Commit = 'gitlens:commit',
 	Commits = 'gitlens:commits',
@@ -29,9 +41,13 @@ export enum ContextValues {
 	FileHistory = 'gitlens:history:file',
 	Folder = 'gitlens:folder',
 	LineHistory = 'gitlens:history:line',
+	Merge = 'gitlens:merge',
+	MergeConflictCurrentChanges = 'gitlens:merge-conflict:current',
+	MergeConflictIncomingChanges = 'gitlens:merge-conflict:incoming',
 	Message = 'gitlens:message',
 	Pager = 'gitlens:pager',
 	PullRequest = 'gitlens:pullrequest',
+	Rebase = 'gitlens:rebase',
 	Reflog = 'gitlens:reflog',
 	ReflogRecord = 'gitlens:reflog-record',
 	Remote = 'gitlens:remote',
@@ -76,7 +92,7 @@ export abstract class ViewNode<TView extends View = View> {
 
 	toClipboard?(): string;
 
-	toString() {
+	toString(): string {
 		return `${Logger.toLoggableName(this)}${this.id != null ? `(${this.id})` : ''}`;
 	}
 
@@ -100,11 +116,14 @@ export abstract class ViewNode<TView extends View = View> {
 
 	refresh?(reset?: boolean): boolean | void | Promise<void> | Promise<boolean>;
 
-	@gate()
+	@gate<RepositoryFolderNode['triggerChange']>(
+		(reset: boolean = false, force: boolean = false, avoidSelf?: ViewNode) =>
+			JSON.stringify([reset, force, avoidSelf?.toString()]),
+	)
 	@debug()
-	triggerChange(reset: boolean = false, force: boolean = false): Promise<void> {
+	triggerChange(reset: boolean = false, force: boolean = false, avoidSelf?: ViewNode): Promise<void> {
 		// If this node has been splatted (e.g. not shown itself, but its children are), then delegate the change to its parent
-		if (this.splatted && this.parent != null) {
+		if (this.splatted && this.parent != null && this.parent !== avoidSelf) {
 			return this.parent.triggerChange(reset, force);
 		}
 
@@ -124,7 +143,7 @@ export abstract class ViewRefNode<
 		return this.uri.repoPath!;
 	}
 
-	toString() {
+	toString(): string {
 		return `${super.toString()}:${GitReference.toString(this.ref, false)}`;
 	}
 }
@@ -133,7 +152,7 @@ export abstract class ViewRefFileNode<TView extends View = View> extends ViewRef
 	abstract get file(): GitFile;
 	abstract get fileName(): string;
 
-	toString() {
+	toString(): string {
 		return `${super.toString()}:${this.fileName}`;
 	}
 }
@@ -159,7 +178,7 @@ export abstract class SubscribeableViewNode<TView extends View = View> extends V
 	protected disposable: Disposable;
 	protected subscription: Promise<Disposable | undefined> | undefined;
 
-	private _loaded: boolean = false;
+	protected loaded: boolean = false;
 
 	constructor(uri: GitUri, view: TView, parent?: ViewNode) {
 		super(uri, view, parent);
@@ -175,14 +194,14 @@ export abstract class SubscribeableViewNode<TView extends View = View> extends V
 
 		const getTreeItem = this.getTreeItem;
 		this.getTreeItem = function (this: SubscribeableViewNode<TView>) {
-			this._loaded = true;
+			this.loaded = true;
 			void this.ensureSubscription();
 			return getTreeItem.apply(this);
 		};
 
 		const getChildren = this.getChildren;
 		this.getChildren = function (this: SubscribeableViewNode<TView>) {
-			this._loaded = true;
+			this.loaded = true;
 			void this.ensureSubscription();
 			return getChildren.apply(this);
 		};
@@ -200,7 +219,7 @@ export abstract class SubscribeableViewNode<TView extends View = View> extends V
 	@gate()
 	@debug()
 	async triggerChange(reset: boolean = false, force: boolean = false): Promise<void> {
-		if (!this._loaded) return;
+		if (!this.loaded) return;
 
 		await super.triggerChange(reset, force);
 	}
@@ -286,6 +305,132 @@ export abstract class SubscribeableViewNode<TView extends View = View> extends V
 
 		this.subscription = Promise.resolve(this.subscribe());
 		await this.subscription;
+	}
+
+	@gate()
+	@debug()
+	async resetSubscription() {
+		await this.unsubscribe();
+		await this.ensureSubscription();
+	}
+}
+
+export abstract class RepositoryFolderNode<
+	TView extends View = View,
+	TChild extends ViewNode = ViewNode
+> extends SubscribeableViewNode<TView> {
+	static key = ':repository';
+	static getId(repoPath: string): string {
+		return `gitlens${this.key}(${repoPath})`;
+	}
+
+	protected splatted = true;
+	protected child: TChild | undefined;
+
+	constructor(uri: GitUri, view: TView, parent: ViewNode, public readonly repo: Repository, splatted: boolean) {
+		super(uri, view, parent);
+
+		this.splatted = splatted;
+	}
+
+	toClipboard(): string {
+		return this.repo.path;
+	}
+
+	get id(): string {
+		return RepositoryFolderNode.getId(this.repo.path);
+	}
+
+	async getTreeItem(): Promise<TreeItem> {
+		this.splatted = false;
+
+		let expand = this.repo.starred;
+		if (!expand) {
+			expand = await Container.git.isActiveRepoPath(this.uri.repoPath);
+		}
+
+		const item = new TreeItem(
+			this.repo.formattedName ?? this.uri.repoPath ?? '',
+			expand ? TreeItemCollapsibleState.Expanded : TreeItemCollapsibleState.Collapsed,
+		);
+		item.contextValue = `${ContextValues.RepositoryFolder}${this.repo.starred ? '+starred' : ''}`;
+		item.description = this.repo.supportsChangeEvents ? undefined : Strings.pad(GlyphChars.Warning, 1, 0);
+		item.tooltip = `${
+			this.repo.formattedName ? `${this.repo.formattedName}\n${this.uri.repoPath}` : this.uri.repoPath ?? ''
+		}${
+			this.repo.supportsChangeEvents
+				? ''
+				: `\n\n${GlyphChars.Warning} Unable to automatically detect repository changes`
+		}`;
+
+		return item;
+	}
+
+	async getSplattedChild() {
+		if (this.child == null) {
+			await this.getChildren();
+		}
+
+		return this.child;
+	}
+
+	@gate()
+	@debug()
+	async refresh(reset: boolean = false) {
+		await this.child?.triggerChange(reset, false, this);
+
+		await this.ensureSubscription();
+	}
+
+	@log()
+	async star() {
+		await this.repo.star();
+		// void this.parent!.triggerChange();
+	}
+
+	@log()
+	async unstar() {
+		await this.repo.unstar();
+		// void this.parent!.triggerChange();
+	}
+
+	@debug()
+	protected subscribe(): Disposable | Promise<Disposable> {
+		return this.repo.onDidChange(this.onRepositoryChanged, this);
+	}
+
+	protected get requiresResetOnVisible(): boolean {
+		return this._repoUpdatedAt !== this.repo.updatedAt;
+	}
+
+	private _repoUpdatedAt: number = this.repo.updatedAt;
+
+	protected abstract changed(e: RepositoryChangeEvent): boolean;
+
+	@debug({
+		args: {
+			0: (e: RepositoryChangeEvent) => e.toString(),
+		},
+	})
+	private onRepositoryChanged(e: RepositoryChangeEvent) {
+		this._repoUpdatedAt = this.repo.updatedAt;
+
+		if (e.changed(RepositoryChange.Closed, RepositoryChangeComparisonMode.Any)) {
+			this.dispose();
+			void this.parent?.triggerChange(true);
+
+			return;
+		}
+
+		if (e.changed(RepositoryChange.Starred, RepositoryChangeComparisonMode.Any)) {
+			void this.parent?.triggerChange(true);
+
+			return;
+		}
+
+		if (this.changed(e)) {
+			void (this.loaded ? this : this.parent ?? this).triggerChange(true);
+		}
 	}
 }
 

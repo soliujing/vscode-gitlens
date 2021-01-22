@@ -3,6 +3,8 @@ import {
 	CancellationToken,
 	commands,
 	ConfigurationChangeEvent,
+	Disposable,
+	MarkdownString,
 	ProgressLocation,
 	TreeItem,
 	TreeItemCollapsibleState,
@@ -14,9 +16,11 @@ import { Container } from '../container';
 import {
 	GitLogCommit,
 	GitReference,
+	GitRemote,
 	GitRevisionReference,
 	Repository,
 	RepositoryChange,
+	RepositoryChangeComparisonMode,
 	RepositoryChangeEvent,
 } from '../git/git';
 import { GitUri } from '../git/gitUri';
@@ -24,28 +28,15 @@ import {
 	BranchNode,
 	BranchTrackingStatusNode,
 	ContextValues,
+	RepositoryFolderNode,
 	RepositoryNode,
-	SubscribeableViewNode,
 	unknownGitUri,
 	ViewNode,
 } from './nodes';
-import { Dates, debug, gate } from '../system';
+import { debug, Functions, gate, Strings } from '../system';
 import { ViewBase } from './viewBase';
 
-export class CommitsRepositoryNode extends SubscribeableViewNode<CommitsView> {
-	protected splatted = true;
-	private child: BranchNode | undefined;
-
-	constructor(uri: GitUri, view: CommitsView, parent: ViewNode, public readonly repo: Repository, splatted: boolean) {
-		super(uri, view, parent);
-
-		this.splatted = splatted;
-	}
-
-	get id(): string {
-		return RepositoryNode.getId(this.repo.path);
-	}
-
+export class CommitsRepositoryNode extends RepositoryFolderNode<CommitsView, BranchNode> {
 	async getChildren(): Promise<ViewNode[]> {
 		if (this.child == null) {
 			const branch = await this.repo.getBranch();
@@ -80,36 +71,74 @@ export class CommitsRepositoryNode extends SubscribeableViewNode<CommitsView> {
 	async getTreeItem(): Promise<TreeItem> {
 		this.splatted = false;
 
-		const branch = await this.repo.getBranch();
+		let expand = this.repo.starred;
+		const [active, branch] = await Promise.all([
+			expand ? undefined : Container.git.isActiveRepoPath(this.uri.repoPath),
+			this.repo.getBranch(),
+		]);
+		if (!expand && (active || (branch?.state.ahead ?? 0) > 0 || (branch?.state.behind ?? 0) > 0)) {
+			expand = true;
+		}
 
 		const item = new TreeItem(
 			this.repo.formattedName ?? this.uri.repoPath ?? '',
-			(branch?.state.ahead ?? 0) > 0 || (branch?.state.behind ?? 0) > 0
-				? TreeItemCollapsibleState.Expanded
-				: TreeItemCollapsibleState.Collapsed,
+			expand ? TreeItemCollapsibleState.Expanded : TreeItemCollapsibleState.Collapsed,
 		);
-		item.contextValue = ContextValues.RepositoryFolder;
+		item.contextValue = `${ContextValues.RepositoryFolder}${this.repo.starred ? '+starred' : ''}`;
 
 		if (branch != null) {
-			const lastFetched = (await this.repo?.getLastFetched()) ?? 0;
+			const lastFetched = (await this.repo.getLastFetched()) ?? 0;
 
 			const status = branch?.getTrackingStatus();
-			item.description = `${status ? `${status} ${GlyphChars.Dot} ` : ''}${branch.name}${
+			item.description = `${this.repo.supportsChangeEvents ? '' : Strings.pad(GlyphChars.Warning, 1, 2)}${
+				status ? `${status}${Strings.pad(GlyphChars.Dot, 1, 1)}` : ''
+			}${branch.name}${
 				lastFetched
-					? ` ${GlyphChars.Dot} Last fetched ${Dates.getFormatter(new Date(lastFetched)).fromNow()}`
+					? `${Strings.pad(GlyphChars.Dot, 1, 1)}Last fetched ${Repository.formatLastFetched(lastFetched)}`
 					: ''
 			}`;
+
+			let providerName;
+			if (branch.tracking != null) {
+				const providers = GitRemote.getHighlanderProviders(await Container.git.getRemotes(branch.repoPath));
+				providerName = providers?.length ? providers[0].name : undefined;
+			} else {
+				const remote = await branch.getRemote();
+				providerName = remote?.provider?.name;
+			}
+
+			item.tooltip = new MarkdownString(
+				`${this.repo.formattedName ?? this.uri.repoPath ?? ''}${
+					lastFetched
+						? `${Strings.pad(GlyphChars.Dash, 2, 2)}Last fetched ${Repository.formatLastFetched(
+								lastFetched,
+								false,
+						  )}`
+						: ''
+				}${this.repo.formattedName ? `\n${this.uri.repoPath}` : ''}\n\nCurrent branch $(git-branch) ${
+					branch.name
+				}${
+					branch.tracking
+						? ` is ${branch.getTrackingStatus({
+								empty: `up to date with $(git-branch) ${branch.tracking}${
+									providerName ? ` on ${providerName}` : ''
+								}`,
+								expand: true,
+								icons: true,
+								separator: ', ',
+								suffix: ` $(git-branch) ${branch.tracking}${providerName ? ` on ${providerName}` : ''}`,
+						  })}`
+						: `hasn't been published to ${providerName ?? 'a remote'}`
+				}${
+					this.repo.supportsChangeEvents
+						? ''
+						: `\n\n${GlyphChars.Warning} Unable to automatically detect repository changes`
+				}`,
+				true,
+			);
 		}
 
 		return item;
-	}
-
-	async getSplattedChild() {
-		if (this.child == null) {
-			await this.getChildren();
-		}
-
-		return this.child;
 	}
 
 	@gate()
@@ -125,41 +154,41 @@ export class CommitsRepositoryNode extends SubscribeableViewNode<CommitsView> {
 	}
 
 	@debug()
-	protected subscribe() {
-		return this.repo.onDidChange(this.onRepositoryChanged, this);
-	}
+	protected async subscribe() {
+		const lastFetched = (await this.repo?.getLastFetched()) ?? 0;
 
-	protected get requiresResetOnVisible(): boolean {
-		return this._repoUpdatedAt !== this.repo.updatedAt;
-	}
+		const interval = Repository.getLastFetchedUpdateInterval(lastFetched);
+		if (lastFetched !== 0 && interval > 0) {
+			return Disposable.from(
+				await super.subscribe(),
+				Functions.interval(() => {
+					// Check if the interval should change, and if so, reset it
+					if (interval !== Repository.getLastFetchedUpdateInterval(lastFetched)) {
+						void this.resetSubscription();
+					}
 
-	private _repoUpdatedAt: number = this.repo.updatedAt;
-
-	@debug({
-		args: {
-			0: (e: RepositoryChangeEvent) =>
-				`{ repository: ${e.repository?.name ?? ''}, changes: ${e.changes.join()} }`,
-		},
-	})
-	private onRepositoryChanged(e: RepositoryChangeEvent) {
-		this._repoUpdatedAt = this.repo.updatedAt;
-
-		if (e.changed(RepositoryChange.Closed)) {
-			this.dispose();
-			void this.parent?.triggerChange(true);
-
-			return;
+					if (this.splatted) {
+						void this.view.triggerNodeChange(this.parent ?? this);
+					} else {
+						void this.view.triggerNodeChange(this);
+					}
+				}, interval),
+			);
 		}
 
-		if (
-			e.changed(RepositoryChange.Config) ||
-			e.changed(RepositoryChange.Index) ||
-			e.changed(RepositoryChange.Heads) ||
-			e.changed(RepositoryChange.Remotes) ||
-			e.changed(RepositoryChange.Unknown)
-		) {
-			void this.triggerChange(true);
-		}
+		return super.subscribe();
+	}
+
+	protected changed(e: RepositoryChangeEvent) {
+		return e.changed(
+			RepositoryChange.Config,
+			RepositoryChange.Heads,
+			RepositoryChange.Index,
+			RepositoryChange.Remotes,
+			RepositoryChange.Status,
+			RepositoryChange.Unknown,
+			RepositoryChangeComparisonMode.Any,
+		);
 	}
 }
 
@@ -193,16 +222,20 @@ export class CommitsViewNode extends ViewNode<CommitsView> {
 
 			const branch = await child.repo.getBranch();
 			if (branch != null) {
-				const lastFetched = (await child.repo?.getLastFetched()) ?? 0;
+				const lastFetched = (await child.repo.getLastFetched()) ?? 0;
 
 				const status = branch.getTrackingStatus();
 				this.view.description = `${status ? `${status} ${GlyphChars.Dot} ` : ''}${branch.name}${
-					lastFetched
-						? ` ${GlyphChars.Dot} Last fetched ${Dates.getFormatter(new Date(lastFetched)).fromNow()}`
-						: ''
+					branch.rebasing ? ' (Rebasing)' : ''
+				}${lastFetched ? ` ${GlyphChars.Dot} Last fetched ${Repository.formatLastFetched(lastFetched)}` : ''}${
+					child.repo.supportsChangeEvents
+						? ''
+						: `${Strings.pad(GlyphChars.Warning, 3, 2)}Auto-refresh unavailable`
 				}`;
 			} else {
-				this.view.description = undefined;
+				this.view.description = child.repo.supportsChangeEvents
+					? undefined
+					: `${Strings.pad(GlyphChars.Warning, 1, 2)}Auto-refresh unavailable`;
 			}
 
 			return child.getChildren();
@@ -264,7 +297,14 @@ export class CommitsView extends ViewBase<CommitsViewNode, CommitsViewConfig> {
 			() => commands.executeCommand('gitlens.views.copy', this.selection),
 			this,
 		);
-		commands.registerCommand(this.getQualifiedCommand('refresh'), () => this.refresh(true), this);
+		commands.registerCommand(
+			this.getQualifiedCommand('refresh'),
+			async () => {
+				await Container.git.resetCaches('branches', 'status', 'tags');
+				return this.refresh(true);
+			},
+			this,
+		);
 		commands.registerCommand(
 			this.getQualifiedCommand('setFilesLayoutToAuto'),
 			() => this.setFilesLayout(ViewFilesLayout.Auto),
@@ -319,9 +359,11 @@ export class CommitsView extends ViewBase<CommitsViewNode, CommitsViewConfig> {
 		if (
 			!changed &&
 			!configuration.changed(e, 'defaultDateFormat') &&
+			!configuration.changed(e, 'defaultDateShortFormat') &&
 			!configuration.changed(e, 'defaultDateSource') &&
 			!configuration.changed(e, 'defaultDateStyle') &&
-			!configuration.changed(e, 'defaultGravatarsStyle')
+			!configuration.changed(e, 'defaultGravatarsStyle') &&
+			!configuration.changed(e, 'defaultTimeFormat')
 		) {
 			return false;
 		}
